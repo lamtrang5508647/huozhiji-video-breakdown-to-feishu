@@ -7,6 +7,7 @@ mutation or backend installation. Transfer success is not final media acceptance
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import math
 from pathlib import Path
@@ -93,6 +94,10 @@ def dict_layers(payload: dict) -> list[dict]:
         layers.append(inner)
     for layer in layers:
         if layer.get("success") is False or layer.get("code", 0) not in (0, "0", None) or layer.get("errCode", 0) not in (0, "0", None):
+            # wx_channels_download apiresult.Err uses HTTP 200 for this error.
+            if (layer.get("code") in (400, "400")
+                    and layer.get("msg") == "please initialize the client socket connection first"):
+                raise AcquireError("page_connection_required")
             raise AcquireError("provider_rejected_source")
     return layers
 
@@ -100,6 +105,21 @@ def dict_layers(payload: dict) -> list[dict]:
 def source_key(url: str) -> tuple:
     parsed = urlsplit(normalize_share_url(url))
     return parsed.hostname, parsed.path, tuple(sorted(parse_qsl(parsed.query, keep_blank_values=True)))
+
+
+def decode_feed_uint64(value: str) -> str:
+    """Decode oid/nid using upstream pkg/util/util.go's big-endian format."""
+    if not re.fullmatch(r"[A-Za-z0-9+/_-]+={0,2}", value):
+        raise AcquireError("unexpected_source")
+    try:
+        raw = base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True)
+    except ValueError:
+        raise AcquireError("unexpected_source") from None
+    if not raw:
+        raise AcquireError("unexpected_source")
+    # DecodeBase64ToUint64String left-pads short input and uses the first eight
+    # bytes of longer input. int.from_bytes already supplies the short behavior.
+    return str(int.from_bytes(raw[:8], "big"))
 
 
 def verified_identity(input_url: str, layers: list[dict], item: dict, native_id: str) -> str:
@@ -122,6 +142,10 @@ def verified_identity(input_url: str, layers: list[dict], item: dict, native_id:
             raise AcquireError("unexpected_source") from None
 
     pairs = parse_qsl(urlsplit(input_url).query, keep_blank_values=True)
+    # Keep source receipts bound to the original URL; normalize only the
+    # comparison fields. Invalid encoded aliases must not hide behind a valid ID.
+    pairs = [("object_id" if name == "oid" else "nonce_id", decode_feed_uint64(value))
+             if name in ("oid", "nid") else (name, value) for name, value in pairs]
     identity_keys = ("id", "object_id", "objectId", "feed_id", "feedId")
     # A provider can echo any input URL beside an unrelated object. Receipts are
     # checked for contradictions above, but only original query/object matches

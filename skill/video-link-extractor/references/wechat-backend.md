@@ -65,6 +65,11 @@ GET /api/channels/feed/profile?url=<经 URL 编码的原分享 URL>
 不参与证明。分享路径本身的 token、文件名和 URL 哈希不属于视频原生 ID，不能
 代替 `object.id`。
 
+上游微信播放长链接的 `oid`、`nid` 是 Base64 编码字段。本入口按上游
+`DecodeBase64ToUint64String` 的大端 uint64 规则还原后，分别与对象 ID、对象
+自身的 `objectNonceId` 比对；不会修改原始 URL 或用外层 nonce 回显作证。
+空值、非法编码、重复或与其他身份参数冲突时，在下载前停止。
+
 普通 `https://weixin.qq.com/sph/<分享token>` 短链接没有这些可比对的身份参数时，
 即使 Provider 原样回显 URL 并返回某个真实 ID、标题和媒体，也只能得到
 `metadata_missing/source_binding_missing`，不会标为 `metadata_ready` 或启动下载。
@@ -100,6 +105,7 @@ Content-Type: application/json
 | 条件 | status | reason |
 | --- | --- | --- |
 | 未配置 Provider | `blocked` | `provider_not_configured` |
+| 已启动本地服务，但微信页面 socket 未连接 | `blocked` | `page_connection_required` |
 | 在线接口未明确允许 | `blocked` | `online_parser_not_authorized` |
 | 无平台原生 ID | `metadata_missing` | `native_id_missing` |
 | 无真实标题/文案 | `metadata_missing` | `title_missing` |
@@ -122,3 +128,31 @@ Content-Type: application/json
 
 此入口的测试使用合成响应和模拟传输，不建立真实微信登录态，也不证明当前
 外部接口或真实平台链接可下载。
+
+## 本地服务与微信页面连接
+
+已核对上游 `ltaoo/wx_channels_download` 的 v260907，官方 Windows x86_64 普通
+构建包 SHA-256 为 `2d4903ed994292ffa1ad019f8524c7b0bf37c25e0966a2e7903de90f3fb678ab`。
+构建包应按官方 Release 的摘要验证，存放在仓库外或忽略的运行目录，不随 Skill 分发。
+上游许可证为 MIT 加 Commons Clause；不得将该后端标成无附加条件的 MIT。
+
+使用独立配置和空工作目录，`server` 子命令可只启动 loopback API，并关闭证书
+自动安装、拦截代理和系统代理修改。API 地址由 `api.hostname`、`api.port` 指定；
+`--hostname`、`--port` 属于代理参数。应同时关闭桥接、自动更新和远程下载。
+建议显式配置自行生成且未信任的独立证书文件，避免证书加载器读取其他软件的已有私钥。
+
+`GET /api/channels/status` 中 `data.available=false` 表示微信页面未连接。
+此时 `/api/channels/feed/profile` 可能返回 HTTP 200，但 JSON 为 `code=400`，
+并带精确消息 `please initialize the client socket connection first`。
+本入口将其识别为 `page_connection_required`；HTTP 200 不能当作提取成功。
+
+仅启动 `server` 不会给微信页面注入连接代码，用户仅打开视频也不能保证连接存在。
+上游普通启动流程涉及证书和拦截代理，必须先确认具体配置与授权。
+默认根证书及私钥是共享的，不应直接信任；Windows 退出逻辑只关闭匹配的代理，
+不会恢复原来的代理配置。若选择本地捕获方式，必须用独立证书、精确的原配置快照
+和外层恢复守护，再正常登录并打开目标视频。禁止将服务启动或页面播放当作已下载。
+
+官方来源：[Release](https://github.com/ltaoo/wx_channels_download/releases/tag/v260907)、
+[server 模式](https://github.com/ltaoo/wx_channels_download/blob/v260907/cmd/server.go)、
+[证书配置](https://github.com/ltaoo/wx_channels_download/blob/v260907/docs/config/cert.md)、
+[Windows 代理实现](https://github.com/ltaoo/wx_channels_download/blob/v260907/pkg/system/proxy_windows.go)。

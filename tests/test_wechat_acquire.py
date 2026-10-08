@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from urllib.parse import urlencode
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -16,6 +17,7 @@ OPAQUE_SHARE = "https://weixin.qq.com/sph/syntheticShare"
 CHANNELS_PAGE = "https://channels.weixin.qq.com/web/pages/feed"
 SHARE = CHANNELS_PAGE + "?object_id=1234567890123456789&objectNonceId=syntheticNonce"
 BACKEND = "http://127.0.0.1:2022"
+SOCKET_MESSAGE = "please initialize the client socket connection first"
 
 
 def profile(url=SHARE):
@@ -134,6 +136,105 @@ class WechatAcquireTests(unittest.TestCase):
         fields, _ = acquirer.metadata(value, CHANNELS_PAGE + "?object_id=1234567890123456789")
         self.assertTrue(fields["identity_verified"])
         self.assertEqual(fields["identity_evidence"], "native_query_match")
+
+    def test_upstream_oid_nid_bind_decoded_big_endian_values(self):
+        # Fixed vectors from the upstream pkg/util/util_test.go, not our encoder.
+        url = CHANNELS_PAGE + "?oid=SuZgeu3RR6A&nid=zpu6HctPGGM"
+        value = profile(url)
+        item = value["data"]["data"]["object"]
+        item.update(id="5397107284542310304", objectNonceId="14887697630331082851")
+        result, _ = self.run_fixture(value, url=url, backend_url=BACKEND)
+        self.assertEqual(result["status"], "metadata_ready")
+        self.assertEqual(result["native_id"], "5397107284542310304")
+        self.assertEqual(result["input_url"], url)
+        self.assertEqual(result["canonical_url"], url)
+        self.assertTrue(result["identity_verified"])
+
+    def test_oid_upstream_uint64_vectors_and_padding_rules(self):
+        vectors = (("AAAAAAAAAAA", "0"), ("AAAAAAAAAAE", "1"),
+                   ("AAAAAAAAAQA", "256"), ("__________8", "18446744073709551615"),
+                   ("z4lFRwCKGX4", "14954560208914487678"),
+                   ("AQ", "1"), ("AQ==", "1"),
+                   ("//////////8=", "18446744073709551615"),
+                   ("AAAAAAAAAAEAAAAA", "1"))
+        for encoded, native in vectors:
+            with self.subTest(encoded=encoded):
+                url = CHANNELS_PAGE + "?" + urlencode({"oid": encoded})
+                value = profile(url)
+                value["data"]["data"]["object"]["id"] = native
+                fields, _ = acquirer.metadata(value, url)
+                self.assertEqual(fields["native_id"], native)
+                self.assertTrue(fields["identity_verified"])
+
+    def test_nid_can_bind_only_to_the_decoded_object_nonce(self):
+        url = CHANNELS_PAGE + "?nid=zpu6HctPGGM"
+        value = profile(url)
+        item = value["data"]["data"]["object"]
+        item["objectNonceId"] = "14887697630331082851"
+        fields, _ = acquirer.metadata(value, url)
+        self.assertTrue(fields["identity_verified"])
+        for wrong in ("14887697630331082852", "zpu6HctPGGM"):
+            item["objectNonceId"] = wrong
+            with self.subTest(nonce=wrong), self.assertRaisesRegex(acquirer.AcquireError, "unexpected_source"):
+                acquirer.metadata(value, url)
+
+    def test_encoded_query_conflicts_never_reach_download(self):
+        queries = ("oid=AAAAAAAAAAE", "nid=AAAAAAAAAAE",
+                   "oid=", "oid=not*base64", "oid=A", "nid=",
+                   "nid=not*base64", "oid=AAAAAAAAAAE&oid=AAAAAAAAAAE",
+                   "nid=zpu6HctPGGM&nonceId=syntheticNonce",
+                   "oid=SuZgeu3RR6A&object_id=1234567890123456789")
+        for query in queries:
+            # A correct legacy ID cannot hide an invalid/conflicting new alias.
+            url = SHARE + "&" + query
+            with self.subTest(query=query), patch.object(acquirer, "download_media", return_value="/synthetic/unexpected.mp4") as download:
+                result, _ = self.run_fixture(profile(url), url=url, backend_url=BACKEND, download=True)
+                self.assertEqual(result["status"], "blocked")
+                self.assertEqual(result["reason"], "unexpected_source")
+                self.assertFalse(result["identity_verified"])
+                download.assert_not_called()
+
+    def test_nid_echo_outside_object_is_not_source_proof(self):
+        url = CHANNELS_PAGE + "?nid=zpu6HctPGGM"
+        value = profile(url)
+        del value["data"]["data"]["object"]["objectNonceId"]
+        value["params"] = {"nid": "14887697630331082851", "url": url}
+        result, _ = self.run_fixture(value, url=url, backend_url=BACKEND)
+        self.assertEqual(result["reason"], "source_binding_missing")
+        self.assertFalse(result["identity_verified"])
+
+    def test_disconnected_upstream_socket_requires_page_connection(self):
+        # Upstream apiresult.Err deliberately responds HTTP 200 with this JSON.
+        for value in ({"code": 400, "msg": SOCKET_MESSAGE},
+                      {"code": 0, "data": {"code": 400, "msg": SOCKET_MESSAGE}}):
+            with self.subTest(payload=value), patch.object(acquirer, "download_media") as download:
+                result, _ = self.run_fixture(value, backend_url=BACKEND, download=True)
+                self.assertEqual(result["status"], "blocked")
+                self.assertEqual(result["reason"], "page_connection_required")
+                self.assertFalse(result["identity_verified"])
+                download.assert_not_called()
+
+    def test_other_provider_errors_are_not_page_connection_errors(self):
+        for value in ({"code": 400, "msg": "socket timeout"},
+                      {"code": 403, "msg": SOCKET_MESSAGE},
+                      {"code": 400, "msg": SOCKET_MESSAGE + " (different error)"}):
+            with self.subTest(payload=value):
+                result, _ = self.run_fixture(value, backend_url=BACKEND)
+                self.assertEqual(result["reason"], "provider_rejected_source")
+        value = profile()
+        value["msg"] = SOCKET_MESSAGE
+        result, _ = self.run_fixture(value, backend_url=BACKEND)
+        self.assertEqual(result["status"], "metadata_ready")
+
+    def test_encoded_query_download_stays_unverified(self):
+        url = CHANNELS_PAGE + "?oid=SuZgeu3RR6A&nid=zpu6HctPGGM"
+        value = profile(url)
+        value["data"]["data"]["object"].update(id="5397107284542310304", objectNonceId="14887697630331082851")
+        with patch.object(acquirer, "download_media", return_value="/synthetic/source.mp4") as download:
+            result, _ = self.run_fixture(value, url=url, backend_url=BACKEND, download=True)
+        self.assertEqual(result["status"], "downloaded")
+        self.assertFalse(result["media_verified"])
+        self.assertEqual(download.call_args.args[2], "5397107284542310304")
 
     def test_nonce_query_can_bind_without_receipt_but_conflicting_nonce_fails(self):
         value = profile()
