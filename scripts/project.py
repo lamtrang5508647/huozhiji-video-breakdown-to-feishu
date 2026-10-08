@@ -9,11 +9,14 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skill" / "analyze-folder-videos-to-feishu"
+ACQUIRE_SKILL = ROOT / "skill" / "video-link-extractor"
+SKILL_NAMES = ("analyze-folder-videos-to-feishu", "video-link-extractor")
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -97,27 +100,51 @@ def doctor(args) -> dict:
     def command(name):
         path = shutil.which(name)
         return {"available": bool(path), "path": path}
-    commands = {name: command(name) for name in ("ffmpeg", "ffprobe", "node", "lark-cli", "whisper", "whisper-cli")}
+    commands = {name: command(name) for name in ("ffmpeg", "ffprobe", "node", "lark-cli", "whisper", "whisper-cli", "yt-dlp")}
     modules = {name: {"available": importlib.util.find_spec(name) is not None} for name in ("av", "PIL")}
     candidates = [args.browser, os.environ.get("SCRIPT_PREVIEW_BROWSER"),
                   "C:/Program Files/Google/Chrome/Application/chrome.exe",
                   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
                   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
                   "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                  *[str(Path.home() / "Applications" / app / "Contents/MacOS" / executable)
+                    for app, executable in (("Google Chrome.app", "Google Chrome"),
+                                            ("Microsoft Edge.app", "Microsoft Edge"), ("Chromium.app", "Chromium"))],
                   shutil.which("google-chrome"), shutil.which("chromium"), shutil.which("chromium-browser")]
     browser = next((str(Path(p).expanduser().resolve()) for p in candidates if p and Path(p).expanduser().is_file()), None)
+    playwright_path = ACQUIRE_SKILL / "vendor/video-batch-download/node_modules/playwright/package.json"
+    playwright = {"available": playwright_path.is_file(), "path": str(playwright_path),
+                  "scope": "Local package presence only; import and browser launch are unverified"}
+    if "acquire" in selected and not browser and playwright["available"] and commands["node"]["available"]:
+        # Asking an installed Playwright package for its executable path neither
+        # installs Chromium nor launches a browser or contacts a platform.
+        try:
+            probe = subprocess.run([commands["node"]["path"], "-e",
+                                    "process.stdout.write(JSON.stringify({executable:require('playwright').chromium.executablePath()}))"],
+                                   cwd=playwright_path.parents[2], capture_output=True, text=True,
+                                   encoding="utf-8", errors="replace", timeout=5, check=False)
+            path = json.loads(probe.stdout).get("executable") if probe.returncode == 0 else None
+            if isinstance(path, str) and Path(path).is_file():
+                browser = str(Path(path).resolve())
+        except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+            pass
     missing = []
     if sys.version_info < (3, 10):
         missing.append("Python >= 3.10")
-    requirements = {"media": ("ffmpeg", "ffprobe"), "feishu": ("lark-cli",), "preview": ("node",)}
+    requirements = {"media": ("ffmpeg", "ffprobe"), "feishu": ("lark-cli",), "preview": ("node",),
+                    "acquire": ("node", "ffmpeg", "ffprobe")}
     for feature in selected:
         for name in requirements.get(feature, ()):
             if not commands[name]["available"]:
                 missing.append(f"{feature}: {name}")
     if "evidence" in selected:
         missing.extend(f"evidence: {name}" for name in modules if not modules[name]["available"])
-    if "preview" in selected and not browser:
-        missing.append("preview: Chrome/Edge/Chromium (pass --browser)")
+    for feature in ("preview", "acquire"):
+        if feature in selected and not browser:
+            missing.append(f"{feature}: Chrome/Edge/Chromium (pass --browser)")
+    if "acquire" in selected and not playwright["available"]:
+        missing.append("acquire: Playwright package in the extractor's vendor/video-batch-download/node_modules")
     if "asr" in selected and not (commands["whisper"]["available"] or commands["whisper-cli"]["available"]):
         missing.append("asr: whisper or whisper-cli; local model must also be configured")
     config_check = None
@@ -130,28 +157,37 @@ def doctor(args) -> dict:
             missing.append("project: declared state files are missing")
     return {"status": "PASS" if not missing else "MISSING_DEPENDENCIES", "python": sys.version.split()[0],
             "selected_features": sorted(selected), "commands": commands, "python_modules": modules,
+            "node_modules": {"playwright": playwright},
             "browser": browser, "project": config_check, "missing": missing,
             "scope": "Local executable/module discovery only; no network requests or authentication. Executable versions, codecs, models, remote access and UI remain unverified; run demo to verify media exports."}
 
 
 def install_skill(args) -> dict:
+    name = getattr(args, "skill", SKILL_NAMES[0])
+    if name not in SKILL_NAMES:
+        raise ValueError("Unknown bundled Skill: " + str(name))
+    source_root = SKILL if name == SKILL_NAMES[0] else ACQUIRE_SKILL
     destination = args.dest.expanduser().resolve()
     if destination.exists():
         raise ValueError(f"Destination already exists; compare or choose another path: {destination}")
-    if destination.is_relative_to(SKILL.resolve()) or SKILL.resolve().is_relative_to(destination):
+    if destination.is_relative_to(source_root.resolve()) or source_root.resolve().is_relative_to(destination):
         raise ValueError("Install destination must be separate from the repository skill source")
-    if not (SKILL / "SKILL.md").is_file():
+    if not (source_root / "SKILL.md").is_file():
         raise ValueError("Bundled skill source is missing")
-    ignore = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", "local-project.json", ".DS_Store")
-    shutil.copytree(SKILL, destination, ignore=ignore)
+    ignore = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", "local-project.json", ".DS_Store",
+                                    "node_modules", "browser-state*", "storage-state*", "cookies*", "credentials*", ".env*",
+                                    "cache", "caches", ".cache", "*-cache", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+                                    ".venv", "venv", "__pypackages__", "ms-playwright", "runtime", "runtimes",
+                                    "*.exe", "*.dll", "*.dylib", "*.so", "*.so.*", "node", "ffmpeg", "ffprobe", "python", "python3")
+    shutil.copytree(source_root, destination, ignore=ignore)
     count = 0
     for copied in destination.rglob("*"):
         if copied.is_file():
-            source = SKILL / copied.relative_to(destination)
+            source = source_root / copied.relative_to(destination)
             if hashlib.sha256(copied.read_bytes()).digest() != hashlib.sha256(source.read_bytes()).digest():
                 raise ValueError(f"Installed file failed readback: {copied.name}")
             count += 1
-    return {"status": "installed_and_hash_verified", "destination": str(destination), "files": count,
+    return {"status": "installed_and_hash_verified", "skill": name, "destination": str(destination), "files": count,
             "runtime_installed": False, "credentials_included": False}
 
 
@@ -161,6 +197,14 @@ def demo(args) -> dict:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.build(args.output.expanduser().resolve(), SKILL / "scripts", args.ffmpeg, args.ffprobe)
+
+
+def acquire(arguments: list[str]) -> int:
+    """Delegate untouched arguments and terminal streams to the extractor CLI."""
+    entrypoint = ACQUIRE_SKILL / "scripts/acquire.py"
+    if not entrypoint.is_file():
+        raise ValueError("Bundled acquisition entrypoint is missing: " + str(entrypoint))
+    return subprocess.run([sys.executable, "-B", str(entrypoint), *arguments], check=False).returncode
 
 
 def parser() -> argparse.ArgumentParser:
@@ -175,7 +219,7 @@ def parser() -> argparse.ArgumentParser:
     init.set_defaults(handler=init_project)
     check = commands.add_parser("doctor", help="Inspect local dependency layers; never log in or contact a service")
     check.add_argument("--project", type=Path, help="Also inspect local config/state existence")
-    check.add_argument("--feature", action="append", choices=("media", "evidence", "preview", "feishu", "asr"), help="Require this optional dependency layer; repeat for multiple layers")
+    check.add_argument("--feature", action="append", choices=("media", "evidence", "preview", "feishu", "asr", "acquire"), help="Require this optional dependency layer; repeat for multiple layers")
     check.add_argument("--browser", help="Explicit browser executable for the preview layer")
     check.set_defaults(handler=doctor)
     sample = commands.add_parser("demo", help="Generate and verify a four-second synthetic source, clips, HTML and XML offline")
@@ -184,14 +228,37 @@ def parser() -> argparse.ArgumentParser:
     sample.add_argument("--ffprobe", default="ffprobe", help="FFprobe command or executable path")
     sample.set_defaults(handler=demo)
     install = commands.add_parser("install-skill", help="Copy and verify the bundled Skill; does not install runtimes or overwrite an existing Skill")
+    install.add_argument("--skill", choices=SKILL_NAMES, default=SKILL_NAMES[0], help="Bundled Skill to install; defaults to the video breakdown Skill")
     install.add_argument("--dest", required=True, type=Path, help="Exact destination Skill directory, e.g. ~/.codex/skills/analyze-folder-videos-to-feishu")
     install.set_defaults(handler=install_skill)
+    grab = commands.add_parser("acquire", help="Forward acquisition arguments to the video-link-extractor Skill",
+                               description="Acquire an authorized source through video-link-extractor. Arguments, terminal output and exit status are forwarded unchanged.")
+    grab.add_argument("--url", required=True, help="Source URL or copied share text")
+    grab.add_argument("--output", required=True, help="New acquisition output directory")
+    grab.add_argument("--platform", choices=("auto", "bilibili", "douyin", "xiaohongshu", "kuaishou", "wechat_channels", "generic"), default="auto")
+    action = grab.add_mutually_exclusive_group()
+    action.add_argument("--metadata-only", action="store_true")
+    action.add_argument("--download", action="store_true")
+    grab.add_argument("--browser", help="Installed browser executable")
+    grab.add_argument("--storage-state", help="Explicit local browser storage state")
+    grab.add_argument("--backend-url", help="Explicit acquisition backend URL")
+    grab.add_argument("--online-endpoint", help="Explicit online parser endpoint")
+    grab.add_argument("--allow-online-parser", action="store_true")
+    grab.add_argument("--ffmpeg", help="FFmpeg command or executable")
+    grab.add_argument("--ffprobe", help="FFprobe command or executable")
+    grab.add_argument("--ytdlp", help="Optional yt-dlp fallback command or executable")
     return result
 
 
 def main(argv=None) -> int:
-    args = parser().parse_args(argv)
+    arguments = list(sys.argv[1:] if argv is None else argv)
     try:
+        # Local help remains available while the independent provider is absent.
+        if arguments and arguments[0] == "acquire":
+            if "--help" in arguments[1:] or "-h" in arguments[1:]:
+                parser().parse_args(["acquire", "--help"])
+            return acquire(arguments[1:])
+        args = parser().parse_args(arguments)
         result = args.handler(args)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result.get("status") != "MISSING_DEPENDENCIES" else 1

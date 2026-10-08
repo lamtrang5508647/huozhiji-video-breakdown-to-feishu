@@ -1,7 +1,9 @@
 """Portable project initialization, overwrite guards, and real synthetic exports."""
 import argparse
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import shutil
@@ -105,12 +107,122 @@ class ProjectCliTests(unittest.TestCase):
                 project.install_skill(args)
 
     def test_each_command_has_help(self):
-        for name in ("init", "doctor", "demo", "install-skill"):
+        for name in ("init", "doctor", "demo", "install-skill", "acquire"):
             with self.subTest(command=name):
                 result = subprocess.run([sys.executable, "-B", ROOT / "scripts/project.py", name, "--help"],
                                         capture_output=True, text=True, encoding="utf-8")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("usage:", result.stdout)
+
+    def test_installer_selects_extractor_and_excludes_credentials_and_runtimes(self):
+        source = self.root / "extractor"
+        source.mkdir()
+        (source / "SKILL.md").write_text("extractor fixture", encoding="utf-8")
+        (source / "scripts").mkdir()
+        (source / "scripts/acquire.py").write_text("# retained source", encoding="utf-8")
+        (source / "vendor").mkdir()
+        (source / "vendor/package.json").write_text("{}", encoding="utf-8")
+        for directory in ("node_modules", "browser-state-private", "cache", "caches", ".cache", ".venv", "runtime", "ms-playwright"):
+            folder = source / "vendor" / directory
+            folder.mkdir()
+            (folder / "must-not-copy.txt").write_text("private/runtime", encoding="utf-8")
+        for name in ("cookies.json", "credentials.toml", ".env.local", "storage-state.json", "browser-state.json",
+                     "node.exe", "node", "ffmpeg", "python3", "cache.pyc", "local-project.json"):
+            (source / "vendor" / name).write_text("excluded", encoding="utf-8")
+        args = argparse.Namespace(skill="video-link-extractor", dest=self.root / "installed-extractor")
+        with patch.object(project, "ACQUIRE_SKILL", source):
+            result = project.install_skill(args)
+        self.assertEqual(result["skill"], "video-link-extractor")
+        self.assertEqual(result["files"], 3)
+        self.assertEqual(sorted(str(p.relative_to(args.dest)).replace("\\", "/") for p in args.dest.rglob("*") if p.is_file()),
+                         ["SKILL.md", "scripts/acquire.py", "vendor/package.json"])
+        self.assertFalse(result["runtime_installed"])
+
+    def test_installer_parser_default_remains_existing_skill(self):
+        args = project.parser().parse_args(["install-skill", "--dest", str(self.root / "installed")])
+        self.assertEqual(args.skill, "analyze-folder-videos-to-feishu")
+
+    def test_acquire_passes_untouched_arguments_and_provider_exit_status(self):
+        source = self.root / "extractor"
+        (source / "scripts").mkdir(parents=True)
+        (source / "scripts/acquire.py").write_text("# provider fixture", encoding="utf-8")
+        arguments = ["--url", "分享文字 https://example.invalid/video?id=one&other=two", "--output", "directory with spaces",
+                     "--platform", "generic", "--metadata-only", "--browser", "browser path", "--storage-state", "private state.json",
+                     "--backend-url", "http://127.0.0.1:1234", "--online-endpoint", "https://example.invalid/parser",
+                     "--allow-online-parser", "--ffmpeg", "custom ffmpeg", "--ffprobe", "custom ffprobe", "--ytdlp", "custom yt-dlp"]
+        stream = io.StringIO()
+        with patch.object(project, "ACQUIRE_SKILL", source), \
+                patch.object(project.subprocess, "run", return_value=subprocess.CompletedProcess([], 17)) as run, \
+                contextlib.redirect_stdout(stream):
+            self.assertEqual(project.main(["acquire", *arguments]), 17)
+        self.assertEqual(run.call_args.args[0], [sys.executable, "-B", str(source / "scripts/acquire.py"), *arguments])
+        self.assertEqual(run.call_args.kwargs, {"check": False})
+        self.assertEqual(stream.getvalue(), "")
+
+    def test_acquire_help_does_not_require_or_execute_provider(self):
+        stream = io.StringIO()
+        with patch.object(project, "ACQUIRE_SKILL", self.root / "missing"), \
+                patch.object(project.subprocess, "run") as run, contextlib.redirect_stdout(stream):
+            with self.assertRaises(SystemExit) as caught:
+                project.main(["acquire", "--help"])
+            self.assertEqual(caught.exception.code, 0)
+            run.assert_not_called()
+        for name in ("--storage-state", "--allow-online-parser", "--metadata-only", "--ytdlp", "wechat_channels"):
+            self.assertIn(name, stream.getvalue())
+
+    def test_acquire_missing_provider_fails_without_launch(self):
+        with patch.object(project, "ACQUIRE_SKILL", self.root / "missing"), \
+                patch.object(project.subprocess, "run") as run, contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(project.main(["acquire", "--url", "https://example.invalid", "--output", "newdir"]), 1)
+            run.assert_not_called()
+
+    def test_doctor_acquire_requires_local_dependencies_but_ytdlp_is_optional(self):
+        source = self.root / "extractor"
+        package = source / "vendor/video-batch-download/node_modules/playwright/package.json"
+        package.parent.mkdir(parents=True)
+        package.write_text("{}", encoding="utf-8")
+        browser = self.root / "chrome"
+        browser.write_bytes(b"local discovery fixture")
+        args = argparse.Namespace(feature=["acquire"], project=None, browser=str(browser))
+        def installed(name):
+            return "fixture-" + name if name in {"node", "ffmpeg", "ffprobe"} else None
+        with patch.object(project, "ACQUIRE_SKILL", source), patch.object(project.shutil, "which", side_effect=installed), \
+                patch.object(project.subprocess, "run") as run:
+            result = project.doctor(args)
+            run.assert_not_called()
+        self.assertEqual(result["status"], "PASS")
+        self.assertTrue(result["node_modules"]["playwright"]["available"])
+        self.assertFalse(result["commands"]["yt-dlp"]["available"])
+        package.unlink()
+        with patch.object(project, "ACQUIRE_SKILL", source), patch.object(project.shutil, "which", return_value=None):
+            result = project.doctor(args)
+        self.assertEqual(result["status"], "MISSING_DEPENDENCIES")
+        self.assertTrue({"acquire: node", "acquire: ffmpeg", "acquire: ffprobe"}.issubset(result["missing"]))
+        self.assertTrue(any("Playwright" in item for item in result["missing"]))
+
+    def test_doctor_finds_existing_playwright_browser_without_launching_it(self):
+        source = self.root / "extractor"
+        package = source / "vendor/video-batch-download/node_modules/playwright/package.json"
+        package.parent.mkdir(parents=True)
+        package.write_text("{}", encoding="utf-8")
+        browser = self.root / "playwright-chromium"
+        browser.write_bytes(b"local discovery fixture")
+        args = argparse.Namespace(feature=["acquire"], project=None, browser=None)
+        real_is_file = Path.is_file
+        def only_fixture_files(path):
+            return real_is_file(path) if path in {package, browser} else False
+        def installed(name):
+            return "fixture-" + name if name in {"node", "ffmpeg", "ffprobe"} else None
+        completed = subprocess.CompletedProcess([], 0, json.dumps({"executable": str(browser)}), "")
+        with patch.object(project, "ACQUIRE_SKILL", source), patch.object(project.shutil, "which", side_effect=installed), \
+                patch.object(Path, "is_file", only_fixture_files), \
+                patch.object(project.subprocess, "run", return_value=completed) as run:
+            result = project.doctor(args)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["browser"], str(browser.resolve()))
+        self.assertIn("executablePath()", run.call_args.args[0][-1])
+        self.assertNotIn("launch", run.call_args.args[0][-1])
+        self.assertEqual(run.call_args.kwargs["cwd"], package.parents[2])
 
     @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg and FFprobe are needed for real media integration")
     def test_real_synthetic_demo_and_artifact_hashes(self):

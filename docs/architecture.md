@@ -5,6 +5,9 @@
 
 ```mermaid
 flowchart TD
+  U[分享链接与明确平台] --> V[链接提取：真实ID、标题、绑定媒体]
+  V --> W[视频流与完整解码、来源回执]
+  W --> A
   A[原片与来源信息] --> B[哈希与时长绑定]
   B --> C[完整观看：字幕、画面、音频状态]
   C --> D[整片框架与连续脚本段]
@@ -37,7 +40,7 @@ flowchart TD
 
 - `source_id` 和源文件 SHA-256 绑定实际视频；标题不是唯一键。
 - 产品归档身份与原片实际品牌分开，不把竞品自动写成本品体验。
-- 平台是来源元数据；支持平台标签不代表实现了该平台下载器。
+- 平台是来源元数据；适配器实现、会话可用和真实下载验证分开记录。
 - 文档注册表使用 Base、产品、平台组成的稳定组键，组内按视频身份更新章节。
 - 远端记录 ID、章节锚点和上传日志是项目状态，不能写进可分发 Skill。
 
@@ -45,7 +48,8 @@ flowchart TD
 
 | 模块 | 主要文件 | 负责什么 |
 | --- | --- | --- |
-| 本地入口 | `scripts/project.py` | 初始化、依赖检查、合成演示、安装 Skill |
+| 本地入口 | `scripts/project.py` | 初始化、链接提取、依赖检查、合成演示、安装两个 Skill |
+| 提取入口 | `skill/video-link-extractor/scripts/acquire.py` | 分享链接路由、目标身份、元数据、原片下载与完整解码验收 |
 | 分析合约 | `validate_script_v3.py`、`validate_section_content.py` | 脚本段连续性、镜头交集、段级证据 |
 | 标色与复核 | `phrase_annotation.py`、`context_review.py`、`publication_review.py` | 字符区间、功能标签、语境记录、来源与审核哈希 |
 | 展示 | `render_script_analysis.py`、`render_platform_chapter.py` | 统一 HTML 和 H1/H2 / 逐字样式 |
@@ -57,7 +61,7 @@ flowchart TD
 | 可选扩展 | PNG、ASR、素材复用与 AI 任务参考 | 需要时启用；不等同于生成视频服务 |
 | 旧模板 | `legacy-folder-workflow.md` | 显式选择的 27 字段链，不作为新项目默认值 |
 
-除根目录入口外，上表脚本均位于 `skill/analyze-folder-videos-to-feishu/scripts/`。
+除根目录和提取入口外，上表脚本均位于 `skill/analyze-folder-videos-to-feishu/scripts/`。
 
 ## 从项目专版剥离了什么
 

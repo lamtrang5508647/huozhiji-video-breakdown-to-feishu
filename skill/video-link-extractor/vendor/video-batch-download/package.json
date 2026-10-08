@@ -1,0 +1,14 @@
+{
+  "name": "video-batch-download",
+  "version": "4.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pluggable multi-platform video download and local transcription",
+  "scripts": { "test": "node --test test/security.test.mjs" },
+  "dependencies": {
+    "playwright": "^1.53.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

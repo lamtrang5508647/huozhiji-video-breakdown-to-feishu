@@ -34,5 +34,9 @@ agents/local-project.json
 *.pt
 *.safetensors
 node_modules/
+browser-state*.json
+storage-state*.json
+cookies*.txt
+credentials*.json
 .DS_Store
 Thumbs.db

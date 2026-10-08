@@ -23,3 +23,10 @@ separate workspace created with `scripts/project.py init`.
   video/frame exports. Report skipped or untested remote paths honestly.
 - Do not add a blanket open-source license until the provenance recorded in
   `PROVENANCE.md` is resolved.
+# Link acquisition
+
+- Use `video-link-extractor` before breakdown when starting from a share link.
+- A platform route or implemented adapter is not a verified download. Preserve the actual provider status, native ID, title/caption origin and source URL.
+- Only a `ready` acquisition with real video stream, complete decode and source SHA-256 may become the breakdown source. It remains unreviewed content.
+- Never auto-export cookies, solve captcha, install system proxies/certificates or enable a third-party Channels parser silently.
+- Channels request echoes cannot establish object identity. Missing native source anchors, unavailable providers and encrypted-only media remain blocked.

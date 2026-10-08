@@ -4,7 +4,8 @@
 短语标色、复用公式和证据，再按 **产品 → 平台 → 视频画廊** 归档到飞书。
 
 这是可安装的 Agent Skill 与一组校验、渲染、切片和同步工具。原片理解和内容复核
-由执行者完成；它不是自动保证语义正确的模型，也没有内置全平台下载或 AI 视频生成服务。
+由执行者完成；它不是自动保证语义正确的模型，也没有内置 AI 视频生成服务。
+新增 `video-link-extractor`，负责链接提取和原片准备，再衔接拆解。
 
 ## 你会得到什么
 
@@ -17,6 +18,8 @@
   配合产品平台导航和视频附件画廊。
 - **统一执行标准**：确定性排版、来源哈希、上下文复核、上传日志和实际保存结果校验。
   较小模型也要交同一套结构化产物，但不能据此承诺不同模型判断力相同。
+- **链接提取**：B站、抖音、小红书、快手的浏览器适配器，以及需要显式配置的视频号适配器；
+  保留真实标题/文案、平台 ID、分享链接和解析后链接。完整媒体解码通过后才交给拆解。
 
 默认正文省略 `不可直接照搬`、`整片受众假设（非测量）`、`复刻素材清单`；
 内部证据与必要校验数据仍保留。原始完整转写与标色字幕摘录分开保存。
@@ -43,6 +46,7 @@ CSV/JSON、`chapter.xml` 和 `verification.json`。字幕直接绘制在合成�
 
 ```sh
 python scripts/project.py install-skill --dest "<你的skills目录>/analyze-folder-videos-to-feishu"
+python scripts/project.py install-skill --skill video-link-extractor --dest "<你的skills目录>/video-link-extractor"
 ```
 
 目标是准确的 Skill 目录，例如所用 Agent 的 `~/.codex/skills/analyze-folder-videos-to-feishu`。
@@ -56,6 +60,25 @@ python scripts/project.py install-skill --dest "<你的skills目录>/analyze-fol
 > 再标记逐画面时间线。完成标色与复核后，导出两类片段。
 
 要同步飞书，再给出明确的项目配置和目标。不要把另一个项目的表格或账号当默认值。
+
+## 从视频链接开始
+
+```sh
+npm ci --ignore-scripts --prefix skill/video-link-extractor/vendor/video-batch-download
+python scripts/project.py doctor --feature acquire --browser "<已安装的Chrome/Edge路径>"
+python scripts/project.py acquire --url "<视频链接或完整分享文案>" --output outputs/video-probe --browser "<浏览器路径>"
+python scripts/project.py acquire --url "<视频链接或完整分享文案>" --output outputs/video-source --browser "<浏览器路径>" --download
+```
+
+默认只探测元数据；`--download` 才下载并检查视频流、完整解码和文件哈希。
+`acquisition.json` 记录状态；通过后 `source.json` 提供原标题、平台 ID、来源 URL、
+原片路径与哈希，用于后续完整脚本和素材拆解。转写能力仍在拆解 Skill 中，转写结果需听校。
+
+**不能保证任何链接都成功。** 登录、私密作品、验证码、链接失效与平台变更可能阻塞。
+小红书图文不当作视频。视频号默认不外发链接、不安装代理/证书，需要明确后端，
+或显式允许在线解析；没有真实 ID 或只提供加密媒体时返回阻塞。
+其他平台可尝试用户安装的 yt-dlp 专用解析器；通用网页结果不伪装成已核实身份。
+详细条件、输出与拆解交接见 [链接提取](docs/link-extraction.md)。
 
 ## 接入飞书
 
@@ -72,7 +95,7 @@ python skill/analyze-folder-videos-to-feishu/scripts/check_project.py --project 
 仓库内的章节发布器处理已登记的文档，不能替代这一步。
 
 上传计划支持显式平台、来源 URL 和字段名称映射。B站保留兼容识别；其他平台需要明确
-的来源 URL，不能依靠标题或短链接猜视频身份。**平台归档支持不等于对应平台下载器已实现。**
+的来源 URL，不能依靠标题或短链接猜视频身份。**平台归档、适配器实现与真实下载验证分别记录。**
 
 ## 依赖与检查
 
@@ -80,6 +103,9 @@ python skill/analyze-folder-videos-to-feishu/scripts/check_project.py --project 
 | --- | --- |
 | JSON 校验、HTML/XML | Python 标准库 |
 | 视频和缩略图导出 | FFmpeg、FFprobe |
+| B站/抖音/小红书/快手链接提取 | Node.js 20+、Playwright、Chrome/Edge/Chromium |
+| 视频号链接提取 | 显式配置的授权后端；媒体验收另需 FFmpeg/FFprobe |
+| 可选其他站点提取 | 自行安装的 yt-dlp 专用站点解析器 |
 | 真实 PTS 证据帧 | `python -m pip install -r requirements-media.txt` |
 | 可选 PNG 预览 | Node.js 22+、Chrome/Edge/Chromium |
 | 可选 ASR 草稿 | 自行安装的 Whisper / whisper.cpp 与本地模型 |
@@ -98,6 +124,7 @@ python scripts/run_checks.py --media --output outputs/checks.json
 
 ```text
 skill/analyze-folder-videos-to-feishu/  可安装 Skill 与底层程序
+skill/video-link-extractor/            链接提取 Skill、裁剪适配器与许可说明
 scripts/                              新用户入口与统一测试入口
 examples/                             占位配置、原创合成样例
 tests/                                可移植回归测试
