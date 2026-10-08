@@ -30,9 +30,12 @@ B站严格核对 BV、CID 和多 P；抖音只接受目标 aweme 详情中的媒
 小红书只接受目标笔记流；快手核对 photo ID，不把推荐卡片下载为目标。
 验证码、登录要求、私密/删除作品直接记录阻塞，不自动绕过。
 
-视频号需显式配置满足 [视频号协议](../skill/video-link-extractor/references/wechat-backend.md)
-的本地授权后端，或显式设置在线解析 endpoint 并传 `--allow-online-parser`。
-仓库没有预置第三方解析服务，没有系统代理或根证书安装器，不承诺匿名解析可用。
+视频号可显式使用 `--wechat-browser --allow-tencent-parse`，将本次链接提交腾讯元宝，
+在独立浏览器会话中正常登录后访问腾讯播放详情。需要扫码时加 `--manual-login`；
+具体命令见 [Skill 能力表](../skill/video-link-extractor/references/capabilities.md)。
+也可显式配置满足 [视频号协议](../skill/video-link-extractor/references/wechat-backend.md)
+的本地授权后端，或设置在线解析 endpoint 并传 `--allow-online-parser`。路径不能混用。
+仓库没有系统代理或根证书安装器，不承诺匿名解析可用。
 若后端仅返回加密媒体，本版本停止，不包含该媒体解密。
 
 其他平台只尝试当前 yt-dlp 专用解析器；playlist、multi-video、Generic 网页/文件结果被拒绝。
@@ -43,8 +46,13 @@ B站严格核对 BV、CID 和多 P；抖音只接受目标 aweme 详情中的媒
 先检查 `acquisition.json` 状态为 `ready`，再读取 `source.json`。
 将 `video_id`、`platform`、`title`、`url`、`source_path` 和 `source_sha256`
 映射到拆解 manifest 的 `source`/项目源文件配置；这个 JSON 是交接回执，不是已审核的分析 manifest。
-平台视频 ID 不能包含在 canonical URL 中的视频号等来源，飞书 profile 需设置
-专用 `source_identity.id_field`，把真实 ID 写入对应字段，不能删除核心来源绑定检查。
+腾讯播放详情只返回导出标识时，`source.json` 明示 `native_id_kind=platform_export_id`、
+原始 `platform_export_id` 与 `identity_stability_verified=false`。`video_id` 是以 `wxexp_`
+开头的可逆 Base64URL 本地键；它不是平台原始数字 ID，不能拿它调用数字 ID 接口。
+源身份检查同时核对该编码和原播放 URL 的唯一 `eid`，保留原输入链接。播放 URL 和
+签名参数完整保存在本地，不能因为参数看似敏感便删除后继续声称源绑定通过。
+其他后端若 canonical URL 不含真实平台 ID，飞书 profile 需配置专用
+`source_identity.id_field`；远端写回及回读仍需实际验证，不能删除核心绑定检查。
 
 按现有拆解 Skill 完成：完整原片观看 → ASR 草稿与听校 → 脚本框架 → 连续语义段 →
 逐画面时间线 → 短语标色和情绪依据 → 上下文复核 → 两种片段导出 → 飞书上传与回读。

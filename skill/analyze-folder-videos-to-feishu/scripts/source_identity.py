@@ -1,6 +1,7 @@
 """Source identity and canonical-to-live field mapping; no network operations."""
 from __future__ import annotations
 
+import base64
 import re
 from urllib.parse import parse_qsl, unquote, urlsplit, urlunsplit
 
@@ -67,6 +68,43 @@ def source_identity(video_id: str, source: dict, *, platform: str | None = None,
     if id_field is not None and (not isinstance(id_field, str) or not id_field.strip()):
         raise ValueError("source_identity.id_field must be a canonical field name")
     parts = urlsplit(url)
+    if (source.get("native_id_kind") == "platform_export_id" or "platform_export_id" in source
+            or source.get("video_id_kind") == "encoded_platform_export_id"
+            or (platform == "视频号" and video_id.startswith("wxexp_"))):
+        # This is a reversible local key for an opaque platform export, not a
+        # numeric object ID or evidence that the identifier stays stable.
+        native = source.get("native_id")
+        if (platform != "视频号" or source.get("platform_key", "wechat_channels") != "wechat_channels"
+                or source.get("native_id_kind") != "platform_export_id"
+                or source.get("video_id_kind") != "encoded_platform_export_id"
+                or source.get("identity_stability_verified") is not False
+                or not isinstance(native, str) or not native
+                or source.get("platform_export_id") != native
+                or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in native)):
+            raise ValueError("Channels export identity requires explicit matching kinds and unverified stability")
+        encoded = "wxexp_" + base64.urlsafe_b64encode(native.encode("utf-8")).decode("ascii").rstrip("=")
+        if video_id != encoded or source.get("video_id", video_id) != video_id:
+            raise ValueError("Channels local video_id must reversibly encode the exact platform export ID")
+        original_input = source.get("input_url")
+        original = urlsplit(canonical_url(original_input))
+        if (original.port is not None or not (
+                (original.hostname == "weixin.qq.com" and original.path.startswith("/sph/") and original.path[5:].strip("/"))
+                or (original.hostname == "channels.weixin.qq.com"
+                    and original.path in ("/web/pages/feed", "/finder-preview/pages/feed")))):
+            raise ValueError("Channels export identity must preserve the original official source input URL")
+        values = [v for k, v in parse_qsl(parts.query, keep_blank_values=True) if k == "eid"]
+        tokens = [v for k, v in parse_qsl(parts.query, keep_blank_values=True) if k == "token"]
+        if (parts.hostname != "channels.weixin.qq.com" or parts.port is not None
+                or parts.path != "/finder-preview/pages/feed" or values != [native]
+                or len(tokens) != 1 or not tokens[0]):
+            raise ValueError("Channels export identity requires the exact official preview URL and one matching eid")
+        for key in ("source_url", "canonical_url"):
+            if key in source and canonical_url(source[key]) != url:
+                raise ValueError("Channels source URL declarations conflict")
+        return {"platform": platform, "url": url, "video_id": video_id, "id_field": id_field,
+                "input_url": original_input, "native_id": native, "platform_export_id": native,
+                "native_id_kind": "platform_export_id",
+                "video_id_kind": "encoded_platform_export_id", "identity_stability_verified": False}
     tokens = {unquote(p) for p in parts.path.split("/") if p}
     tokens.update(v for _, v in parse_qsl(parts.query, keep_blank_values=True))
     if platform != "B站" and video_id not in tokens and not id_field:

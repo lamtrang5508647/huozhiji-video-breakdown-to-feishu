@@ -1,5 +1,6 @@
 """Synthetic identity/mapping regressions; these never call Feishu."""
 import copy
+import base64
 import hashlib
 import json
 from pathlib import Path
@@ -7,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+from urllib.parse import urlencode
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'skill/analyze-folder-videos-to-feishu/scripts'))
 from source_identity import canonical_schema, source_identity, verify_source
@@ -69,6 +71,76 @@ class IdentityTests(unittest.TestCase):
             source_identity('clip-001', {'platform': 'Example', 'url': 'https://example.invalid/clip-001'}, platform='Other')
         with self.assertRaises(ValueError):
             source_identity('BVabcdefghij', {'platform': 'Example', 'url': 'https://bilibili.com/video/BVabcdefghij'})
+
+
+class WechatExportIdentityTests(unittest.TestCase):
+    def setUp(self):
+        self.export_id = 'synthetic+/platform-export=='
+        self.key = 'wxexp_' + base64.urlsafe_b64encode(self.export_id.encode('utf-8')).decode('ascii').rstrip('=')
+        self.url = 'https://channels.weixin.qq.com/finder-preview/pages/feed?' + urlencode({'eid': self.export_id, 'token': 'synthetic'})
+        self.source = {'platform': '视频号', 'platform_key': 'wechat_channels', 'url': self.url,
+                       'source_url': self.url, 'video_id': self.key,
+                       'input_url': 'https://weixin.qq.com/sph/syntheticShare', 'platform_export_id': self.export_id,
+                       'video_id_kind': 'encoded_platform_export_id', 'native_id': self.export_id,
+                       'native_id_kind': 'platform_export_id', 'identity_stability_verified': False}
+
+    def test_explicit_export_identity_is_reversible_and_reconstructs_exactly(self):
+        identity = source_identity(self.key, self.source)
+        self.assertEqual(identity['video_id'], self.key)
+        self.assertEqual(identity['native_id'], self.export_id)
+        self.assertEqual(identity['platform_export_id'], self.export_id)
+        self.assertEqual(identity['input_url'], self.source['input_url'])
+        self.assertEqual(identity['native_id_kind'], 'platform_export_id')
+        self.assertEqual(identity['video_id_kind'], 'encoded_platform_export_id')
+        self.assertFalse(identity['identity_stability_verified'])
+        self.assertEqual(source_identity(self.key, identity), identity)
+        verify_source(identity, platform='视频号', urls=[self.url])
+
+    def test_export_branch_requires_explicit_matching_types_and_platform(self):
+        for field in ('video_id_kind', 'native_id_kind', 'native_id', 'identity_stability_verified', 'input_url', 'platform_export_id'):
+            changed = dict(self.source)
+            del changed[field]
+            with self.subTest(missing=field), self.assertRaises(ValueError):
+                source_identity(self.key, changed, id_field='来源视频ID')
+        for changes in ({'platform': 'Example'}, {'platform_key': 'douyin'},
+                        {'native_id_kind': 'numeric_object_id'}, {'video_id_kind': 'native'},
+                        {'identity_stability_verified': True}, {'identity_stability_verified': 0},
+                        {'platform_export_id': 'different'}, {'input_url': 'https://evil.invalid/share'},
+                        {'native_id': self.export_id + 'other'}, {'video_id': self.key + 'other'}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                source_identity(self.key, {**self.source, **changes}, id_field='来源视频ID')
+
+    def test_export_key_must_encode_exact_raw_value_without_padding(self):
+        for key in (self.key + '=', self.key + 'A', 'wxexp_fixture', 'numeric-object-id'):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                source_identity(key, self.source)
+
+    def test_export_canonical_origin_path_and_unique_eid_are_required(self):
+        bad_urls = ('https://channels.weixin.qq.com.evil.invalid/finder-preview/pages/feed?eid=' + self.key,
+                    'https://channels.weixin.qq.com/web/pages/feed?' + urlencode({'eid': self.export_id}),
+                    'https://channels.weixin.qq.com:444/finder-preview/pages/feed?' + urlencode({'eid': self.export_id}),
+                    self.url + '&eid=' + urlencode({'x': self.export_id})[2:],
+                    self.url + '&token=other', self.url.replace('&token=synthetic', ''),
+                    self.url.replace('token=synthetic', 'token='),
+                    self.url.replace('eid=', 'other='),
+                    self.url.replace('synthetic%2B%2Fplatform-export%3D%3D', 'unrelated'))
+        for url in bad_urls:
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                source_identity(self.key, {**self.source, 'url': url, 'source_url': url}, id_field='来源视频ID')
+        with self.assertRaises(ValueError):
+            source_identity(self.key, {**self.source, 'source_url': self.url + '&other=1'})
+
+    def test_export_record_still_requires_exact_source_url_with_id_field(self):
+        identity = source_identity(self.key, self.source, id_field='来源视频ID')
+        verify_source(identity, platform='视频号', urls=[self.url], stable_id=self.key)
+        for urls in ([], [self.url + '&other=1'], [self.url, self.url + '&other=1']):
+            with self.subTest(urls=urls), self.assertRaises(ValueError):
+                verify_source(identity, platform='视频号', urls=urls, stable_id=self.key)
+
+    def test_regular_numeric_wechat_identity_is_unchanged(self):
+        url = 'https://channels.weixin.qq.com/web/pages/feed?object_id=1234567890123456789'
+        identity = source_identity('1234567890123456789', {'platform': '视频号', 'url': url})
+        self.assertEqual(identity, {'platform': '视频号', 'url': url, 'video_id': '1234567890123456789', 'id_field': None})
 
 
 class MappingTests(unittest.TestCase):

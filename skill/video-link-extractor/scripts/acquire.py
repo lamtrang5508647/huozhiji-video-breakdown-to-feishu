@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 from urllib.parse import urlsplit, parse_qs
@@ -85,6 +88,67 @@ def run(command: list[str], timeout: int) -> subprocess.CompletedProcess:
         raise AcquisitionError("timeout", "Acquisition or media validation exceeded its time limit") from exc
 
 
+def _stop_owned_browser(process: subprocess.Popen) -> bool:
+    """Terminate only the tree/group created by this Popen, then reap it."""
+    cleaned = True
+    try:
+        if os.name == "nt":
+            killed = subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
+                                    timeout=10, shell=False)
+            cleaned = killed.returncode == 0
+        else:
+            # start_new_session below makes this owned PID the process-group ID.
+            os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass  # The owned group has already exited.
+    except (OSError, subprocess.TimeoutExpired):
+        cleaned = False
+    if not cleaned:
+        try:
+            process.kill()
+        except OSError:
+            pass
+    try:
+        process.communicate(timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        cleaned = False
+        try:
+            process.kill()
+            process.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        finally:
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+    return cleaned
+
+
+def run_owned_browser(command: list[str], timeout: int) -> subprocess.CompletedProcess:
+    """Give the Channels browser a hard deadline and own its cleanup boundary."""
+    creation = ({"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)}
+                if os.name == "nt" else {"start_new_session": True})
+    try:
+        # The provider contract is its JSON file. Discard console output so a
+        # descendant cannot keep inherited pipes open after the owned root exits.
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   text=True, encoding="utf-8", errors="replace", shell=False, **creation)
+    except FileNotFoundError:
+        raise AcquisitionError("dependency_missing", "The Channels browser executable is unavailable") from None
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        if not _stop_owned_browser(process):
+            raise AcquisitionError("browser_cleanup_failed", "Browser timed out and its owned process tree could not be fully terminated") from None
+        raise AcquisitionError("timeout", "Channels browser acquisition exceeded its time limit; its owned process tree was terminated") from None
+    except BaseException:
+        _stop_owned_browser(process)
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, stdout or "", stderr or "")
+
+
 def verify_media(path: Path, ffprobe: str, ffmpeg: str, timeout: int) -> dict:
     if not path.is_file() or path.stat().st_size == 0:
         raise AcquisitionError("media_missing", "Provider did not produce a nonempty local media file")
@@ -118,6 +182,65 @@ def verify_media(path: Path, ffprobe: str, ffmpeg: str, timeout: int) -> dict:
             "complete_decode_verified": True}
 
 
+def wechat_export_key(native_id: str) -> str:
+    if (not isinstance(native_id, str) or not native_id
+            or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in native_id)):
+        raise AcquisitionError("source_mismatch", "Channels export ID must be nonempty opaque text without whitespace or controls")
+    key = "wxexp_" + base64.urlsafe_b64encode(native_id.encode("utf-8")).decode("ascii").rstrip("=")
+    if len(key) > 160:
+        raise AcquisitionError("source_mismatch", "Channels export ID exceeds the supported reversible local key length")
+    return key
+
+
+def validate_wechat_export(data: dict, url: str, canonical: str) -> None:
+    identity, evidence = data.get("native_id"), data.get("identity_evidence")
+    if (data.get("platform") != "wechat_channels" or data.get("native_id_kind") != "platform_export_id"
+            or data.get("platform_export_id") != identity
+            or data.get("identity_stability_verified") is not False or not isinstance(evidence, dict)
+            or evidence.get("kind") != "tencent_same_origin_request_chain"
+            or evidence.get("parse_input_url") != url or evidence.get("parse_playable_url") != canonical
+            or evidence.get("parse_endpoint") != "https://yuanbao.tencent.com/api/weixin/get_parse_result"
+            or evidence.get("feed_endpoint") != "https://channels.weixin.qq.com/finder-preview/api/feed/get_feed_info"
+            or evidence.get("play_token_matched") is not True
+            or any(evidence.get(key) != identity for key in
+                   ("play_eid", "feed_export_id", "dynamic_export_id"))):
+        raise AcquisitionError("source_mismatch", "Channels export ID requires the exact Tencent request/response identity chain")
+    for key in ("parse_http_status", "feed_http_status"):
+        if type(evidence.get(key)) is not int or not 200 <= evidence[key] < 300:
+            raise AcquisitionError("source_mismatch", "Tencent identity evidence requires actual successful HTTP statuses")
+    for key in ("parse_code", "feed_err_code", "business_error_type"):
+        if type(evidence.get(key)) is not int or evidence[key] != 0:
+            raise AcquisitionError("source_mismatch", "Tencent identity evidence requires explicit successful business codes")
+    wechat_export_key(identity)
+    parsed = urlsplit(canonical)
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    tokens = query.get("token", [])
+    if (canonical != data.get("canonical_url") or parsed.scheme != "https"
+            or parsed.hostname != "channels.weixin.qq.com" or parsed.port not in (None, 443)
+            or parsed.username is not None or parsed.password is not None or parsed.fragment
+            or any(c.isspace() or ord(c) < 32 for c in canonical)
+            or parsed.path != "/finder-preview/pages/feed"
+            or query.get("eid") != [identity] or len(tokens) != 1 or not tokens[0]):
+        raise AcquisitionError("source_mismatch", "Channels export ID requires the exact official preview URL and one matching eid")
+
+
+def validate_wechat_options(args, platform: str) -> None:
+    browser = getattr(args, "wechat_browser", False)
+    consent = getattr(args, "allow_tencent_parse", False)
+    manual = getattr(args, "manual_login", False)
+    if (browser or consent or manual) and platform != "wechat_channels":
+        raise AcquisitionError("invalid_options", "Channels browser options require a Channels source")
+    if (consent or manual) and not browser:
+        raise AcquisitionError("invalid_options", "Tencent parsing and manual login require --wechat-browser")
+    if browser:
+        if getattr(args, "backend_url", None) or getattr(args, "online_endpoint", None) or getattr(args, "allow_online_parser", False):
+            raise AcquisitionError("invalid_options", "Choose the Channels browser or a configured provider, without mixing them")
+        if not consent:
+            raise AcquisitionError("tencent_parse_not_authorized", "--wechat-browser requires explicit --allow-tencent-parse")
+        if type(args.timeout) is not int or not 0 < args.timeout * 1000 <= 2147483647:
+            raise AcquisitionError("invalid_options", "Channels browser timeout must be a positive whole-second timer budget")
+
+
 def validate_provider(data: dict, url: str, platform: str, output: Path, download: bool) -> dict:
     if data.get("status") not in ("metadata_ready", "downloaded"):
         raise AcquisitionError(data.get("error_code") or data.get("reason") or "provider_failed",
@@ -132,6 +255,11 @@ def validate_provider(data: dict, url: str, platform: str, output: Path, downloa
         raise AcquisitionError("source_mismatch", "Canonical URL platform differs from the requested platform")
     if data.get("title_kind") not in ("title", "caption", "extractor_title"):
         raise AcquisitionError("metadata_missing", "Title must come from source metadata, not a filename/template")
+    evidence = data.get("identity_evidence")
+    if (data.get("native_id_kind") == "platform_export_id" or "platform_export_id" in data
+            or (isinstance(evidence, dict) and evidence.get("kind") == "tencent_same_origin_request_chain")
+            or (platform == "wechat_channels" and urlsplit(canonical).path == "/finder-preview/pages/feed")):
+        validate_wechat_export(data, url, canonical)
     if platform == "generic":
         extractor = data.get("extractor")
         if not isinstance(extractor, str) or not extractor.strip() or extractor.lower() == "generic":
@@ -212,11 +340,24 @@ def ytdlp_provider(args, url: str, output: Path) -> dict:
 
 
 def provider(args, url: str, platform: str, output: Path) -> dict:
+    validate_wechat_options(args, platform)
     if platform == "generic":
         data = ytdlp_provider(args, url, output)
         write_json(output / "provider-result.json", data)
         return data
-    if platform == "wechat_channels":
+    wechat_browser = platform == "wechat_channels" and getattr(args, "wechat_browser", False)
+    if wechat_browser:
+        command = ["node", str(SKILL / "scripts/wechat_browser_acquire.mjs"),
+                   "--allow-tencent-parse", "--ffmpeg", args.ffmpeg,
+                   "--timeout-ms", str(args.timeout * 1000)]
+        for flag, value in (("--browser", args.browser), ("--storage-state", args.storage_state)):
+            if value:
+                command += [flag, value]
+        if args.headed:
+            command.append("--headed")
+        if args.manual_login:
+            command.append("--manual-login")
+    elif platform == "wechat_channels":
         command = [sys.executable, "-B", str(SKILL / "scripts/wechat_acquire.py")]
         for flag, value in (("--backend-url", args.backend_url), ("--online-endpoint", args.online_endpoint)):
             if value:
@@ -232,13 +373,17 @@ def provider(args, url: str, platform: str, output: Path) -> dict:
         if args.headed:
             command.append("--headed")
     command += ["--url", url, "--output", str(output), "--download" if args.download else "--metadata-only"]
-    result = run(command, args.timeout)
+    result = (run_owned_browser if wechat_browser else run)(command, args.timeout)
     file = output / "provider-result.json"
     if not file.is_file():
         raise AcquisitionError("provider_contract", "Provider did not create its metadata result; check runtime dependencies")
     data = json.loads(file.read_text(encoding="utf-8-sig"))
     if result.returncode and data.get("status") in ("metadata_ready", "downloaded"):
         raise AcquisitionError("provider_failed", "Provider exit code and success status disagree")
+    if wechat_browser and data.get("status") in ("metadata_ready", "downloaded"):
+        # Route knowledge prevents a browser receipt from dropping its kind and
+        # pretending to satisfy the older native-query provider contract.
+        validate_wechat_export(data, url, input_url(data.get("canonical_url", "")))
     return data
 
 
@@ -248,6 +393,7 @@ def acquire(args) -> dict:
     platform = detected if args.platform == "auto" else args.platform
     if platform != detected:
         raise AcquisitionError("platform_mismatch", "Explicit platform differs from the recognized source host")
+    validate_wechat_options(args, platform)
     if platform == "bilibili":
         bilibili_page(url)
     output = Path(args.output).expanduser().resolve()
@@ -271,6 +417,11 @@ def acquire(args) -> dict:
                       "duration_seconds": receipt["media"]["duration_seconds"],
                       "acquisition_receipt": str(output / "acquisition.json"),
                       "transcript_status": "not_started", "content_reviewed": False}
+            if data.get("native_id_kind") == "platform_export_id":
+                source.update(video_id=wechat_export_key(data["native_id"]),
+                              video_id_kind="encoded_platform_export_id", native_id=data["native_id"],
+                              native_id_kind="platform_export_id", platform_export_id=data["native_id"],
+                              identity_stability_verified=False)
             write_json(output / "source.json", source)
         write_json(output / "acquisition.json", receipt)
         return receipt
@@ -293,6 +444,9 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--browser", help="Explicit local Chromium/Chrome/Edge executable")
     cli.add_argument("--storage-state", help="Explicit caller-owned Playwright login state; never exported automatically")
     cli.add_argument("--headed", action="store_true", help="Explicitly allow a visible browser; never bypass captcha")
+    cli.add_argument("--wechat-browser", action="store_true", help="Use the explicit Tencent browser flow for a Channels source")
+    cli.add_argument("--allow-tencent-parse", action="store_true", help="Consent to send this one Channels link to Tencent Yuanbao")
+    cli.add_argument("--manual-login", action="store_true", help="Allow manual login in the Channels browser context; never export it")
     cli.add_argument("--backend-url", help="Configured local Channels metadata/download backend")
     cli.add_argument("--online-endpoint", help="Explicit third-party Channels parser; off by default")
     cli.add_argument("--allow-online-parser", action="store_true", help="Consent to send this link to the supplied parser endpoint")

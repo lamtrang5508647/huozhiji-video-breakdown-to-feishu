@@ -23,6 +23,10 @@ FFmpeg、PyAV、Pillow、Node.js、Playwright、浏览器、Whisper、yt-dlp 与
 | `skill/video-link-extractor/vendor/qiaomu-download` | [joeseesun/qiaomu-download](https://github.com/joeseesun/qiaomu-download)，`8e92fb0c717537902ba1bad7d06c67411ea56c11` | MIT；仅改编 URL/媒体限制等必要帮助代码，保留 LICENSE 和 UPSTREAM.md；未复制后端安装器、自动升级或代理/证书流程 |
 
 统一入口、来源验收、完整解码、视频号协议与本地回归由本项目补充。
+腾讯元宝浏览器路径、平台导出身份验收和受限 CDN 下载由本项目独立实现，
+依据本次正常授权会话中实际观察到的腾讯请求/响应；该私有前端协议可能变化。
+未复制 `ltaoo/wx_channels_download` 的解析实现或固定认证请求头，
+也不分发其可执行文件；本地捕获后端的附加许可条件见视频号参考文档。
 第三方 MIT 许可只适用于对应组件，不把早期未知来源代码自动变成 MIT。
 原先使用的 `tiderzheng/bili-downloader-agent` 未找到明确 LICENSE，未将其代码复制进仓库；
 本次以已核实许可的适配器实现 B站入口。也未原样复制默认外发链接且缺少 LICENSE 的候选。

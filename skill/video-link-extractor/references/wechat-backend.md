@@ -1,5 +1,42 @@
 # 视频号 Provider 协议
 
+## 明确授权的腾讯浏览器路径
+
+统一入口可选择 `--wechat-browser --allow-tencent-parse`。这条路径单独实现于
+`scripts/wechat_browser_acquire.mjs`，不需要安装上游捕获后端、系统代理或证书。
+目前仅接受单条无额外查询参数或片段的 `https://weixin.qq.com/sph/...` 分享短链。
+授权只允许本次指定链接提交腾讯元宝；登录需要正常人工操作，不自动读取或导出 Cookie。
+需要等待扫码时加 `--manual-login`，它启用可见浏览器窗口；仅需可见窗口时也可用 `--headed`。运行命令见
+[能力和运行条件](capabilities.md)。未登录且未选择人工登录时返回 `LOGIN_REQUIRED`。
+
+浏览器在 `https://yuanbao.tencent.com` 页面上下文中请求
+`/api/weixin/get_parse_result`，只发送当前链接和固定解析类型；随后在同一浏览器上下文
+打开实际返回的 `https://channels.weixin.qq.com/finder-preview/pages/feed` 播放链接。
+匹配 `/finder-preview/api/feed/get_feed_info` 的实际请求与响应，必须同时满足：
+
+- 解析输入与用户本次链接一致，HTTP 为 2xx，明确业务码为 0。
+- 播放链接只有一个非空 `eid` 和 `token`；详情请求的 `exportId` 与
+  `baseReq.generalToken` 分别精确匹配，两者都不能仅由请求回显伪造。
+- 详情响应 HTTP 为 2xx、`errCode=0`、`data.errMsg.type=0`，且
+  `sceneInfo.dynamicExportId` 与播放 `eid`、实际请求 `exportId` 全等。
+- 文案和媒体均来自这个已匹配详情响应的 `feedInfo`。解析响应的 `wx_export_id`
+  可与播放 `eid` 不同，不能用它替代详情请求的导出标识。
+
+保存原播放 URL 及完整签名参数，不重写为猜测地址。缺少身份链、只有封面、媒体加密
+或登录/权限失败时，在下载前停止；只接受目标 feed 的 HTTPS 腾讯视频地址。
+
+平台没有返回原始数字视频 ID 时，回执明确 `native_id_kind=platform_export_id`、
+`platform_export_id=<原始导出标识>`、`identity_stability_verified=false`。
+`source.json.video_id` 使用 `wxexp_` 加原标识 UTF-8 的无填充 Base64URL，
+作为安全可逆的本地键。拆解源身份检查同时验证编码、原标识、原输入与播放 `eid`。
+这个键不证明跨会话长期稳定，也不能传入只接受数字对象 ID 的平台接口。
+
+Node 提供方只报告 `metadata_ready` 或 `downloaded`；外层 Python 完成实际视频流、
+全片视频/音轨解码及哈希检查后，才报告 `ready`。以下旧详情 Provider 路径保留
+原来的对象 ID/nonce/token 约束；它不能靠增加来源声明字段变成腾讯浏览器身份链。
+
+## 显式配置的详情 Provider
+
 `scripts/wechat_acquire.py` 是独立的链接采集入口。它只调用用户明确配置的
 Provider，不安装证书、不修改系统代理、不启动微信或捕获服务、不读取或导出
 Cookie，也不解密媒体。MIT 来源和固定上游版本见
