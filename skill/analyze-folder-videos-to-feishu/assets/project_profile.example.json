@@ -1,0 +1,697 @@
+{
+  "schema_version": 1,
+  "mode": "feishu",
+  "base_id": "REPLACE_BASE_TOKEN",
+  "base_url": "https://example.invalid/base/REPLACE_BASE_TOKEN",
+  "identity": "bot",
+  "app_id": "cli_REPLACE_APP_ID",
+  "expected_base_owner_id": null,
+  "document_owners": {},
+  "registry_path": "state/platform-document-registry.json",
+  "video_index_path": "state/video-index.json",
+  "network": {
+    "ignore_proxy_env": false
+  },
+  "tables": {
+    "videos": {
+      "id": "tbl_REPLACE_videos",
+      "name": "源视频",
+      "fields_snapshot": "config/schema/videos.json",
+      "fields": {
+        "整片框架分析": {
+          "id": "fld_REPLACE_videos_01",
+          "name": "整片框架分析",
+          "type": "text"
+        },
+        "原音校对状态": {
+          "id": "fld_REPLACE_videos_02",
+          "name": "原音校对状态",
+          "type": "select"
+        },
+        "完整拆解时间线": {
+          "id": "fld_REPLACE_videos_03",
+          "name": "完整拆解时间线",
+          "type": "text"
+        },
+        "标色原文": {
+          "id": "fld_REPLACE_videos_04",
+          "name": "标色原文",
+          "type": "text"
+        },
+        "可复用脚本骨架": {
+          "id": "fld_REPLACE_videos_05",
+          "name": "可复用脚本骨架",
+          "type": "text"
+        },
+        "镜头一标签": {
+          "id": "fld_REPLACE_videos_06",
+          "name": "镜头一标签",
+          "type": "select"
+        },
+        "拆解镜头一": {
+          "id": "fld_REPLACE_videos_07",
+          "name": "拆解镜头一",
+          "type": "attachment"
+        },
+        "来源平台": {
+          "id": "fld_REPLACE_videos_08",
+          "name": "来源平台",
+          "type": "select"
+        },
+        "标题": {
+          "id": "fld_REPLACE_videos_09",
+          "name": "标题",
+          "type": "text"
+        },
+        "复刻适用条件": {
+          "id": "fld_REPLACE_videos_10",
+          "name": "复刻适用条件",
+          "type": "text"
+        },
+        "拆解进度": {
+          "id": "fld_REPLACE_videos_11",
+          "name": "拆解进度",
+          "type": "text"
+        },
+        "文字说明【镜头拆解描述】": {
+          "id": "fld_REPLACE_videos_12",
+          "name": "文字说明【镜头拆解描述】",
+          "type": "text"
+        },
+        "拆解版本": {
+          "id": "fld_REPLACE_videos_13",
+          "name": "拆解版本",
+          "type": "text"
+        },
+        "画面总数": {
+          "id": "fld_REPLACE_videos_14",
+          "name": "画面总数",
+          "type": "number"
+        },
+        "原视频": {
+          "id": "fld_REPLACE_videos_15",
+          "name": "原视频",
+          "type": "attachment"
+        },
+        "视频脚本": {
+          "id": "fld_REPLACE_videos_16",
+          "name": "视频脚本",
+          "type": "text"
+        },
+        "原片脚本公式": {
+          "id": "fld_REPLACE_videos_17",
+          "name": "原片脚本公式",
+          "type": "text"
+        },
+        "彩色脚本预览": {
+          "id": "fld_REPLACE_videos_18",
+          "name": "彩色脚本预览",
+          "type": "attachment"
+        },
+        "B站链接": {
+          "id": "fld_REPLACE_videos_19",
+          "name": "B站链接",
+          "type": "text"
+        },
+        "所属产品": {
+          "id": "fld_REPLACE_videos_20",
+          "name": "所属产品",
+          "type": "link"
+        },
+        "画面素材": {
+          "id": "fld_REPLACE_videos_21",
+          "name": "画面素材",
+          "type": "link"
+        },
+        "来源链接": {
+          "id": "fld_REPLACE_videos_22",
+          "name": "来源链接",
+          "type": "text"
+        },
+        "预览指纹": {
+          "id": "fld_REPLACE_videos_23",
+          "name": "预览指纹",
+          "type": "text"
+        },
+        "可复用变量公式": {
+          "id": "fld_REPLACE_videos_24",
+          "name": "可复用变量公式",
+          "type": "text"
+        },
+        "任务编码": {
+          "id": "fld_REPLACE_videos_25",
+          "name": "任务编码",
+          "type": "text"
+        },
+        "片中产品/品牌": {
+          "id": "fld_REPLACE_videos_26",
+          "name": "片中产品/品牌",
+          "type": "text"
+        },
+        "脚本段": {
+          "id": "fld_REPLACE_videos_27",
+          "name": "脚本段",
+          "type": "link"
+        },
+        "彩色脚本分析": {
+          "id": "fld_REPLACE_videos_28",
+          "name": "彩色脚本分析",
+          "type": "text"
+        }
+      }
+    },
+    "materials": {
+      "id": "tbl_REPLACE_materials",
+      "name": "画面素材",
+      "fields_snapshot": "config/schema/materials.json",
+      "fields": {
+        "开始秒": {
+          "id": "fld_REPLACE_materials_01",
+          "name": "开始秒",
+          "type": "number"
+        },
+        "结束秒": {
+          "id": "fld_REPLACE_materials_02",
+          "name": "结束秒",
+          "type": "number"
+        },
+        "画面标签": {
+          "id": "fld_REPLACE_materials_03",
+          "name": "画面标签",
+          "type": "select"
+        },
+        "ID": {
+          "id": "fld_REPLACE_materials_04",
+          "name": "ID",
+          "type": "auto_number"
+        },
+        "质量评级": {
+          "id": "fld_REPLACE_materials_05",
+          "name": "质量评级",
+          "type": "select"
+        },
+        "来源记录": {
+          "id": "fld_REPLACE_materials_06",
+          "name": "来源记录",
+          "type": "text"
+        },
+        "产品编码": {
+          "id": "fld_REPLACE_materials_07",
+          "name": "产品编码",
+          "type": "formula"
+        },
+        "分辨率": {
+          "id": "fld_REPLACE_materials_08",
+          "name": "分辨率",
+          "type": "text"
+        },
+        "备注": {
+          "id": "fld_REPLACE_materials_09",
+          "name": "备注",
+          "type": "text"
+        },
+        "适合位置": {
+          "id": "fld_REPLACE_materials_10",
+          "name": "适合位置",
+          "type": "select"
+        },
+        "内容标签": {
+          "id": "fld_REPLACE_materials_11",
+          "name": "内容标签",
+          "type": "text"
+        },
+        "画面编号": {
+          "id": "fld_REPLACE_materials_12",
+          "name": "画面编号",
+          "type": "text"
+        },
+        "来源平台": {
+          "id": "fld_REPLACE_materials_13",
+          "name": "来源平台",
+          "type": "formula"
+        },
+        "文件Token": {
+          "id": "fld_REPLACE_materials_14",
+          "name": "文件Token",
+          "type": "text"
+        },
+        "重复组": {
+          "id": "fld_REPLACE_materials_15",
+          "name": "重复组",
+          "type": "text"
+        },
+        "校对说明": {
+          "id": "fld_REPLACE_materials_16",
+          "name": "校对说明",
+          "type": "text"
+        },
+        "文件名": {
+          "id": "fld_REPLACE_materials_17",
+          "name": "文件名",
+          "type": "text"
+        },
+        "横竖屏": {
+          "id": "fld_REPLACE_materials_18",
+          "name": "横竖屏",
+          "type": "select"
+        },
+        "所属脚本段": {
+          "id": "fld_REPLACE_materials_19",
+          "name": "所属脚本段",
+          "type": "link"
+        },
+        "拆解版本": {
+          "id": "fld_REPLACE_materials_20",
+          "name": "拆解版本",
+          "type": "text"
+        },
+        "剪辑角色": {
+          "id": "fld_REPLACE_materials_21",
+          "name": "剪辑角色",
+          "type": "select"
+        },
+        "对应字幕摘录": {
+          "id": "fld_REPLACE_materials_22",
+          "name": "对应字幕摘录",
+          "type": "text"
+        },
+        "内容段名称": {
+          "id": "fld_REPLACE_materials_23",
+          "name": "内容段名称",
+          "type": "text"
+        },
+        "处理状态": {
+          "id": "fld_REPLACE_materials_24",
+          "name": "处理状态",
+          "type": "text"
+        },
+        "画面序号": {
+          "id": "fld_REPLACE_materials_25",
+          "name": "画面序号",
+          "type": "number"
+        },
+        "来源字段": {
+          "id": "fld_REPLACE_materials_26",
+          "name": "来源字段",
+          "type": "select"
+        },
+        "画面描述": {
+          "id": "fld_REPLACE_materials_27",
+          "name": "画面描述",
+          "type": "text"
+        },
+        "素材ID": {
+          "id": "fld_REPLACE_materials_28",
+          "name": "素材ID",
+          "type": "text"
+        },
+        "素材附件": {
+          "id": "fld_REPLACE_materials_29",
+          "name": "素材附件",
+          "type": "attachment"
+        },
+        "内容段编号": {
+          "id": "fld_REPLACE_materials_30",
+          "name": "内容段编号",
+          "type": "text"
+        },
+        "情绪": {
+          "id": "fld_REPLACE_materials_31",
+          "name": "情绪",
+          "type": "select"
+        },
+        "时长秒": {
+          "id": "fld_REPLACE_materials_32",
+          "name": "时长秒",
+          "type": "number"
+        },
+        "原视频关联": {
+          "id": "fld_REPLACE_materials_33",
+          "name": "原视频关联",
+          "type": "link"
+        },
+        "关键帧": {
+          "id": "fld_REPLACE_materials_34",
+          "name": "关键帧",
+          "type": "attachment"
+        },
+        "可用状态": {
+          "id": "fld_REPLACE_materials_35",
+          "name": "可用状态",
+          "type": "select"
+        },
+        "所属产品": {
+          "id": "fld_REPLACE_materials_36",
+          "name": "所属产品",
+          "type": "formula"
+        },
+        "素材类型": {
+          "id": "fld_REPLACE_materials_37",
+          "name": "素材类型",
+          "type": "select"
+        },
+        "身份与画面限制": {
+          "id": "fld_REPLACE_materials_38",
+          "name": "身份与画面限制",
+          "type": "select"
+        },
+        "AI重制": {
+          "id": "fld_REPLACE_materials_39",
+          "name": "AI重制",
+          "type": "select"
+        },
+        "选材分区": {
+          "id": "fld_REPLACE_materials_40",
+          "name": "选材分区",
+          "type": "select"
+        },
+        "素材主题": {
+          "id": "fld_REPLACE_materials_41",
+          "name": "素材主题",
+          "type": "select"
+        },
+        "场景大类": {
+          "id": "fld_REPLACE_materials_42",
+          "name": "场景大类",
+          "type": "select"
+        },
+        "编导调用建议": {
+          "id": "fld_REPLACE_materials_43",
+          "name": "编导调用建议",
+          "type": "text"
+        },
+        "复用审核": {
+          "id": "fld_REPLACE_materials_44",
+          "name": "复用审核",
+          "type": "select"
+        },
+        "编导用途": {
+          "id": "fld_REPLACE_materials_45",
+          "name": "编导用途",
+          "type": "select"
+        },
+        "选材优先级": {
+          "id": "fld_REPLACE_materials_46",
+          "name": "选材优先级",
+          "type": "select"
+        },
+        "调用标签": {
+          "id": "fld_REPLACE_materials_47",
+          "name": "调用标签",
+          "type": "select"
+        },
+        "复用条件": {
+          "id": "fld_REPLACE_materials_48",
+          "name": "复用条件",
+          "type": "text"
+        },
+        "剪辑复用": {
+          "id": "fld_REPLACE_materials_49",
+          "name": "剪辑复用",
+          "type": "select"
+        },
+        "场景细分": {
+          "id": "fld_REPLACE_materials_50",
+          "name": "场景细分",
+          "type": "select"
+        },
+        "重制要点": {
+          "id": "fld_REPLACE_materials_51",
+          "name": "重制要点",
+          "type": "text"
+        }
+      }
+    },
+    "segments": {
+      "id": "tbl_REPLACE_segments",
+      "name": "脚本段",
+      "fields_snapshot": "config/schema/segments.json",
+      "fields": {
+        "原视频": {
+          "id": "fld_REPLACE_segments_01",
+          "name": "原视频",
+          "type": "link"
+        },
+        "来源视频标题": {
+          "id": "fld_REPLACE_segments_02",
+          "name": "来源视频标题",
+          "type": "text"
+        },
+        "所属产品": {
+          "id": "fld_REPLACE_segments_03",
+          "name": "所属产品",
+          "type": "link"
+        },
+        "时长秒": {
+          "id": "fld_REPLACE_segments_04",
+          "name": "时长秒",
+          "type": "number"
+        },
+        "文案来源": {
+          "id": "fld_REPLACE_segments_05",
+          "name": "文案来源",
+          "type": "select"
+        },
+        "模型适配判断": {
+          "id": "fld_REPLACE_segments_06",
+          "name": "模型适配判断",
+          "type": "text"
+        },
+        "段落序号": {
+          "id": "fld_REPLACE_segments_07",
+          "name": "段落序号",
+          "type": "number"
+        },
+        "源文案": {
+          "id": "fld_REPLACE_segments_08",
+          "name": "源文案",
+          "type": "text"
+        },
+        "待补事实与材料": {
+          "id": "fld_REPLACE_segments_09",
+          "name": "待补事实与材料",
+          "type": "text"
+        },
+        "预期受众反应假设": {
+          "id": "fld_REPLACE_segments_10",
+          "name": "预期受众反应假设",
+          "type": "text"
+        },
+        "拆解版本": {
+          "id": "fld_REPLACE_segments_11",
+          "name": "拆解版本",
+          "type": "text"
+        },
+        "预览指纹": {
+          "id": "fld_REPLACE_segments_12",
+          "name": "预览指纹",
+          "type": "text"
+        },
+        "可复用结构": {
+          "id": "fld_REPLACE_segments_13",
+          "name": "可复用结构",
+          "type": "text"
+        },
+        "脚本功能": {
+          "id": "fld_REPLACE_segments_14",
+          "name": "脚本功能",
+          "type": "select"
+        },
+        "段名": {
+          "id": "fld_REPLACE_segments_15",
+          "name": "段名",
+          "type": "text"
+        },
+        "段落视频": {
+          "id": "fld_REPLACE_segments_16",
+          "name": "段落视频",
+          "type": "attachment"
+        },
+        "本段作用": {
+          "id": "fld_REPLACE_segments_17",
+          "name": "本段作用",
+          "type": "text"
+        },
+        "结束秒": {
+          "id": "fld_REPLACE_segments_18",
+          "name": "结束秒",
+          "type": "number"
+        },
+        "关联原画面": {
+          "id": "fld_REPLACE_segments_19",
+          "name": "关联原画面",
+          "type": "link"
+        },
+        "原音校对状态": {
+          "id": "fld_REPLACE_segments_20",
+          "name": "原音校对状态",
+          "type": "select"
+        },
+        "段落编号": {
+          "id": "fld_REPLACE_segments_21",
+          "name": "段落编号",
+          "type": "text"
+        },
+        "呈现的证据": {
+          "id": "fld_REPLACE_segments_22",
+          "name": "呈现的证据",
+          "type": "text"
+        },
+        "可替换句式": {
+          "id": "fld_REPLACE_segments_23",
+          "name": "可替换句式",
+          "type": "text"
+        },
+        "原片情绪推进": {
+          "id": "fld_REPLACE_segments_24",
+          "name": "原片情绪推进",
+          "type": "text"
+        },
+        "开始秒": {
+          "id": "fld_REPLACE_segments_25",
+          "name": "开始秒",
+          "type": "number"
+        },
+        "原片情绪标签": {
+          "id": "fld_REPLACE_segments_26",
+          "name": "原片情绪标签",
+          "type": "select"
+        },
+        "彩色脚本": {
+          "id": "fld_REPLACE_segments_27",
+          "name": "彩色脚本",
+          "type": "text"
+        },
+        "校对说明": {
+          "id": "fld_REPLACE_segments_28",
+          "name": "校对说明",
+          "type": "text"
+        },
+        "本段脚本公式": {
+          "id": "fld_REPLACE_segments_29",
+          "name": "本段脚本公式",
+          "type": "text"
+        },
+        "来源平台": {
+          "id": "fld_REPLACE_segments_30",
+          "name": "来源平台",
+          "type": "select"
+        },
+        "源片结构": {
+          "id": "fld_REPLACE_segments_31",
+          "name": "源片结构",
+          "type": "text"
+        },
+        "核心问题或主张": {
+          "id": "fld_REPLACE_segments_32",
+          "name": "核心问题或主张",
+          "type": "text"
+        },
+        "镜头组说明": {
+          "id": "fld_REPLACE_segments_33",
+          "name": "镜头组说明",
+          "type": "text"
+        },
+        "复刻说明": {
+          "id": "fld_REPLACE_segments_34",
+          "name": "复刻说明",
+          "type": "text"
+        },
+        "时间范围": {
+          "id": "fld_REPLACE_segments_35",
+          "name": "时间范围",
+          "type": "text"
+        },
+        "标色原文": {
+          "id": "fld_REPLACE_segments_36",
+          "name": "标色原文",
+          "type": "text"
+        },
+        "彩色脚本预览": {
+          "id": "fld_REPLACE_segments_37",
+          "name": "彩色脚本预览",
+          "type": "attachment"
+        },
+        "片段检查状态": {
+          "id": "fld_REPLACE_segments_38",
+          "name": "片段检查状态",
+          "type": "select"
+        },
+        "脚本段键": {
+          "id": "fld_REPLACE_segments_39",
+          "name": "脚本段键",
+          "type": "text"
+        }
+      }
+    },
+    "products": {
+      "id": "tbl_REPLACE_products",
+      "name": "产品目录",
+      "fields_snapshot": "config/schema/products.json",
+      "fields": {
+        "产品业务名": {
+          "id": "fld_REPLACE_products_01",
+          "name": "产品业务名",
+          "type": "text"
+        },
+        "产品编码": {
+          "id": "fld_REPLACE_products_02",
+          "name": "产品编码",
+          "type": "text"
+        },
+        "素材入口": {
+          "id": "fld_REPLACE_products_03",
+          "name": "素材入口",
+          "type": "text"
+        },
+        "归类说明": {
+          "id": "fld_REPLACE_products_04",
+          "name": "归类说明",
+          "type": "text"
+        }
+      }
+    },
+    "platforms": {
+      "id": "tbl_REPLACE_platforms",
+      "name": "平台目录",
+      "fields_snapshot": "config/schema/platforms.json",
+      "fields": {
+        "整片拆解入口": {
+          "id": "fld_REPLACE_platforms_01",
+          "name": "整片拆解入口",
+          "type": "text"
+        },
+        "产品编码": {
+          "id": "fld_REPLACE_platforms_02",
+          "name": "产品编码",
+          "type": "formula"
+        },
+        "导航编号": {
+          "id": "fld_REPLACE_platforms_03",
+          "name": "导航编号",
+          "type": "text"
+        },
+        "所属产品": {
+          "id": "fld_REPLACE_platforms_04",
+          "name": "所属产品",
+          "type": "link"
+        },
+        "平台": {
+          "id": "fld_REPLACE_platforms_05",
+          "name": "平台",
+          "type": "select"
+        },
+        "平台入口": {
+          "id": "fld_REPLACE_platforms_06",
+          "name": "平台入口",
+          "type": "text"
+        },
+        "单镜头素材入口": {
+          "id": "fld_REPLACE_platforms_07",
+          "name": "单镜头素材入口",
+          "type": "text"
+        }
+      }
+    }
+  }
+}

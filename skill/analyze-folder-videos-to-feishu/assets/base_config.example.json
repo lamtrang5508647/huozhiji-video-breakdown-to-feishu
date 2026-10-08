@@ -1,0 +1,309 @@
+{
+  "schema_version": "2026-08-03-core-27",
+  "base_name": "<your-selected-base-name>",
+  "base_url": "<your-selected-base-url>",
+  "base_token": "<your-base-token>",
+  "table_name": "<your-table-name>",
+  "table_id": "<your-table-id>",
+  "view_name": "<your-view-name>",
+  "view_id": "<your-view-id>",
+  "attachment_field_name": "案例素材",
+  "attachment_field_id": "<your-attachment-field-id>",
+  "fields": [
+    {
+      "name": "案例标题",
+      "id": "<your-field-id-01>",
+      "type": "text"
+    },
+    {
+      "name": "案例素材",
+      "id": "<your-field-id-02>",
+      "type": "attachment"
+    },
+    {
+      "name": "覆盖人群",
+      "id": "<your-field-id-03>",
+      "type": "select",
+      "multiple": true,
+      "options": [
+        "Z世代",
+        "新锐白领",
+        "精致妈妈",
+        "小镇青年",
+        "资深中产",
+        "都市蓝领",
+        "小镇中老年",
+        "都市银发"
+      ]
+    },
+    {
+      "name": "可用类型",
+      "id": "<your-field-id-04>",
+      "type": "select",
+      "multiple": true,
+      "options": [
+        "句式",
+        "词根",
+        "画面元素",
+        "动作结构",
+        "剪辑节奏",
+        "音效设计",
+        "跨赛道结构",
+        "结构复用",
+        "结构公式"
+      ]
+    },
+    {
+      "name": "身份",
+      "id": "<your-field-id-05>",
+      "type": "select",
+      "multiple": true,
+      "options": [
+        "专业视角",
+        "素人视角",
+        "闺蜜视角",
+        "买家视角",
+        "测评视角",
+        "商家视角",
+        "明星视角",
+        "明星代言"
+      ]
+    },
+    {
+      "name": "素材开头类型",
+      "id": "<your-field-id-06>",
+      "type": "select",
+      "multiple": true,
+      "options": [
+        "直切产品",
+        "第一视角",
+        "解压动作",
+        "痛点开场",
+        "结果前置",
+        "感官冲击",
+        "生活分享"
+      ]
+    },
+    {
+      "name": "内容形式",
+      "id": "<your-field-id-07>",
+      "type": "select",
+      "multiple": true,
+      "options": [
+        "配音展示",
+        "营销号",
+        "ASMR",
+        "产品特写",
+        "场景种草",
+        "口播讲解",
+        "混剪卡点",
+        "科普痛点",
+        "真人出镜",
+        "街头采访",
+        "混剪",
+        "科普评测",
+        "单品种草",
+        "混剪流",
+        "科普种草"
+      ]
+    },
+    {
+      "name": "文案类型",
+      "id": "<your-field-id-08>",
+      "type": "select",
+      "multiple": true,
+      "options": [
+        "第一人称需求",
+        "据悉型",
+        "痛点共鸣",
+        "利益承诺",
+        "生活态度",
+        "价格刺激",
+        "口语种草"
+      ]
+    },
+    {
+      "name": "跨类目对标",
+      "id": "<your-field-id-09>",
+      "type": "select",
+      "multiple": true,
+      "options": [
+        "原生改编",
+        "跨品类迁移",
+        "跨赛道复刻",
+        "同赛道升级",
+        "结构复用",
+        "汽车用品",
+        "家居清洁",
+        "厨房清洁",
+        "清洁喷雾",
+        "个护家清",
+        "家清日用",
+        "美妆个护",
+        "食品饮料",
+        "宠物用品",
+        "生鲜水果",
+        "农副产品",
+        "健康食品",
+        "日化清洁",
+        "口腔个护",
+        "洗护发",
+        "护发赛道",
+        "防晒喷雾",
+        "膳食营养补充剂",
+        "图书教育"
+      ]
+    },
+    {
+      "name": "原脚本文案",
+      "id": "<your-field-id-10>",
+      "type": "text"
+    },
+    {
+      "name": "前三秒钩子",
+      "id": "<your-field-id-11>",
+      "type": "text"
+    },
+    {
+      "name": "开头可复刻动作",
+      "id": "<your-field-id-12>",
+      "type": "text"
+    },
+    {
+      "name": "开头高光画面",
+      "id": "<your-field-id-13>",
+      "type": "text"
+    },
+    {
+      "name": "开头留人画面为什么留人",
+      "id": "<your-field-id-14>",
+      "type": "text"
+    },
+    {
+      "name": "开头文案为什么留人",
+      "id": "<your-field-id-15>",
+      "type": "text"
+    },
+    {
+      "name": "开头切入需求要点",
+      "id": "<your-field-id-16>",
+      "type": "select",
+      "multiple": true,
+      "options": [
+        "健康",
+        "口气清新",
+        "情绪治愈",
+        "精致感",
+        "省钱",
+        "颜值",
+        "效率"
+      ]
+    },
+    {
+      "name": "主卖点",
+      "id": "<your-field-id-17>",
+      "type": "text"
+    },
+    {
+      "name": "主痛点",
+      "id": "<your-field-id-18>",
+      "type": "text"
+    },
+    {
+      "name": "次卖点",
+      "id": "<your-field-id-19>",
+      "type": "text"
+    },
+    {
+      "name": "次痛点",
+      "id": "<your-field-id-20>",
+      "type": "text"
+    },
+    {
+      "name": "结构公式",
+      "id": "<your-field-id-21>",
+      "type": "text"
+    },
+    {
+      "name": "可迁移结构",
+      "id": "<your-field-id-22>",
+      "type": "text"
+    },
+    {
+      "name": "不可照搬点",
+      "id": "<your-field-id-23>",
+      "type": "text"
+    },
+    {
+      "name": "可复刻脚本方向",
+      "id": "<your-field-id-24>",
+      "type": "text"
+    },
+    {
+      "name": "赛道品类",
+      "id": "<your-field-id-25>",
+      "type": "select",
+      "multiple": false,
+      "options": [
+        "玩具乐器",
+        "服饰内衣",
+        "个护家清",
+        "智能家居",
+        "生鲜",
+        "美妆",
+        "母婴宠物",
+        "鲜花园艺",
+        "本地生活",
+        "汽车用品",
+        "食品饮料",
+        "3C数码家电",
+        "图书教育",
+        "鞋靴箱包",
+        "虚拟充值",
+        "运动户外",
+        "钟表配饰",
+        "珠宝文玩",
+        "医疗健康",
+        "酒类",
+        "滋补保健",
+        "原料包装",
+        "餐饮外卖",
+        "口腔个护",
+        "美妆个护",
+        "家清日用",
+        "情绪消费品",
+        "服饰穿搭",
+        "母婴用品",
+        "宠物用品",
+        "金融保险",
+        "其他",
+        "家居百货",
+        "美业赛道",
+        "书法",
+        "服饰鞋包"
+      ]
+    },
+    {
+      "name": "素材等级",
+      "id": "<your-field-id-26>",
+      "type": "select",
+      "multiple": false,
+      "options": [
+        "S级素材",
+        "A级素材",
+        "B级素材"
+      ]
+    },
+    {
+      "name": "复刻价值",
+      "id": "<your-field-id-27>",
+      "type": "select",
+      "multiple": false,
+      "options": [
+        "高",
+        "中",
+        "低"
+      ]
+    }
+  ]
+}
