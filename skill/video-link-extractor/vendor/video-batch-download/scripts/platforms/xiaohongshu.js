@@ -459,7 +459,7 @@ export class XiaohongshuParser extends PlatformParser {
     }));
 
     const originKey = video.consumer?.originVideoKey ?? video.originVideoKey;
-    if (originKey) {
+    if (typeof originKey === "string" && originKey) {
       candidates.push({
         url: /^https?:\/\//.test(originKey) ? originKey : `https://sns-video-bd.xhscdn.com/${originKey.replace(/^\//, "")}`,
         source: "origin-video-key",
@@ -472,8 +472,8 @@ export class XiaohongshuParser extends PlatformParser {
       candidates.push({ url: directUrl, source: "direct-video-url" });
     }
 
-    const discoveredUrl = this._findCdnUrl(video);
-    if (discoveredUrl) candidates.push({ url: discoveredUrl, source: "recursive-note-search" });
+    // Only explicit video fields of the exact target note may supply media.
+    // Covers, BGM and nested recommendation objects are not video evidence.
     const unique = [...new Map(
       candidates
         .filter((item) => this._isVideoCdnUrl(item.url))
@@ -589,7 +589,7 @@ export class XiaohongshuParser extends PlatformParser {
   }
 
   _buildQualityAudit(availableStreams, selected) {
-    // Streams from the origin-video-key / runtime fallback paths may carry no
+    // Streams from origin-video-key or direct-video fields may carry no
     // quality metadata at all; keep the audit fields informative regardless.
     const qualities = [...new Set(availableStreams.map((stream) => {
       const value = stream.label ?? stream.quality;
@@ -599,15 +599,26 @@ export class XiaohongshuParser extends PlatformParser {
       advertisedQualities: qualities.length ? qualities : ["unknown"],
       accessibleQualities: qualities.length ? qualities : ["unknown"],
       selectedQuality: selected ? String(selected.label ?? selected.quality ?? "unknown") : null,
-      selectionReason: "highest anonymous stream by resolution, frame rate, bitrate, and size; codec/source only break quality ties",
+      selectionReason: "highest target-note stream by resolution, frame rate, bitrate, and size; codec/source only break quality ties",
       limitedBy: null,
     };
   }
 
   _isVideoCdnUrl(url) {
-    return /^https?:\/\/[^\s"']*xhscdn\.com\//i.test(url)
-      && !this._isHlsUrl(url)
-      && /(sns-video|\.mp4(?:[/?#]|$))/i.test(url);
+    if (typeof url !== "string" || !/^https:\/\//i.test(url)
+        || /[\s"'\\\u0000-\u001f\u007f]/u.test(url)) return false;
+    let parsed, pathname;
+    try {
+      parsed = new URL(url);
+      pathname = decodeURIComponent(parsed.pathname);
+    } catch { return false; }
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port || parsed.hash
+        || !(parsed.hostname === "xhscdn.com" || parsed.hostname.endsWith(".xhscdn.com"))) return false;
+    if (this._isHlsUrl(url) || this._isHlsUrl(pathname)
+        || /\.(?:avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)(?:$|[!/@])/i.test(pathname)) return false;
+    // A query value naming "sns-video" does not turn an image CDN URL into media.
+    return /^sns-video(?:-[a-z0-9-]+)?\.xhscdn\.com$/i.test(parsed.hostname)
+      || /\.mp4(?:\/|$)/i.test(pathname);
   }
 
   _isHlsUrl(url) {
@@ -616,31 +627,6 @@ export class XiaohongshuParser extends PlatformParser {
       || /\/hls(?:[/?#]|$)/i.test(text)
       || /[?&](?:format|type|protocol)=hls(?:[&#]|$)/i.test(text)
       || /\.(?:ts|m2ts)(?:[?#]|$)/i.test(text);
-  }
-
-  /**
-   * Deep search for CDN video URLs in the note data.
-   */
-  _findCdnUrl(obj, depth = 0) {
-    if (depth > 10 || obj == null) return null;
-    if (typeof obj === "string") {
-      if (this._isVideoCdnUrl(obj)) return obj;
-      return null;
-    }
-    if (Array.isArray(obj)) {
-      for (const child of obj) {
-        const found = this._findCdnUrl(child, depth + 1);
-        if (found) return found;
-      }
-      return null;
-    }
-    if (typeof obj === "object") {
-      for (const child of Object.values(obj)) {
-        const found = this._findCdnUrl(child, depth + 1);
-        if (found) return found;
-      }
-    }
-    return null;
   }
 
   /**

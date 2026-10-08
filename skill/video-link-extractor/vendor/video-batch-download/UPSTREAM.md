@@ -16,6 +16,13 @@ executables and storage state, and never install browsers or read browser
 cookies automatically. Bilibili media is requested with the bound video's CID.
 There is no WeChat Channels provider in this upstream subset.
 
+Xiaohongshu candidates are restricted to the exact note's explicit video streams,
+originVideoKey and direct video URL fields. Recursive searches through cover,
+BGM or nested recommendation metadata are removed. Media URLs require HTTPS
+and the actual xhscdn.com hostname boundary; images, HLS and query-only video
+labels cannot establish a playable target. These guards have synthetic regressions;
+their post-change authenticated live check remains separate from earlier downloads.
+
 Douyin alone distinguishes ordinary comment/SMS-login and optional HD-login UI
 from an actual content-access challenge. Such UI is ignored only when an exact
 target detail provides its own playable streams. Visible verification widgets,

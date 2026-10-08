@@ -115,6 +115,67 @@ test("Xiaohongshu never uses runtime streams when target has no bound media", ()
   assert.deepEqual(parser._resolveAvailableStreams({ id: xhsId, type: "video" }, [{ url: "https://sns-video-bd.xhscdn.com/recommend.mp4" }], xhsUrl, true), []);
   assert.deepEqual(parser._collectNoteMediaCandidates({ id: xhsId, type: "video", related: { video: { url: "https://sns-video-bd.xhscdn.com/recommend.mp4" } } }), []);
 });
+test("Xiaohongshu cover-only target metadata cannot become a playable original", async () => {
+  const url = "https://sns-video-bd.xhscdn.com/synthetic-cover.jpg";
+  for (const video of [{ coverUrl: url }, { cover: { url: url.replace(".jpg", ".mp4") } }]) {
+    const parser = new XiaohongshuParser();
+    const note = { id: xhsId, type: "video", title: "Synthetic target", video };
+    assert.deepEqual(parser._collectNoteMediaCandidates(note), []);
+    parser._extractNoteFromPage = async () => note;
+    const fake = fakeBrowser(xhsUrl);
+    await assert.rejects(parser.parse(fake.manager, xhsUrl, options), { code: "MEDIA_DISCOVERY_FAILED" });
+    assert(fake.isClosed());
+  }
+});
+test("Xiaohongshu nested recommendation and bgm videos never substitute for the target", async () => {
+  const other = "https://sns-video-bd.xhscdn.com/synthetic-other.mp4";
+  const note = { id: xhsId, type: "video", title: "Synthetic target", video: {
+    recommended: { video: { media: { stream: { h264: [{ masterUrl: other }] } } } },
+    related: [{ videoUrl: other }], bgmInfo: { url: other }, poster: { downloadUrl: other },
+  } };
+  const parser = new XiaohongshuParser();
+  assert.deepEqual(parser._collectNoteMediaCandidates(note), []);
+  assert.deepEqual(parser._resolveAvailableStreams(note, [{ url: other }], xhsUrl, true), []);
+  parser._extractNoteFromPage = async () => note;
+  await assert.rejects(parser.parse(fakeBrowser(xhsUrl).manager, xhsUrl, options), { code: "MEDIA_DISCOVERY_FAILED" });
+});
+test("Xiaohongshu preserves explicit target streams, origin keys and direct video URLs at the provider boundary", async () => {
+  const target = "https://sns-video-hw.xhscdn.com/target-stream?token=synthetic";
+  const origin = "https://sns-video-bd.xhscdn.com/synthetic-origin";
+  const direct = "https://media.xhscdn.com/synthetic-direct.mp4?token=synthetic";
+  const other = "https://sns-video-bd.xhscdn.com/recommended.mp4";
+  const note = { id: xhsId, type: "video", title: "Synthetic native title", video: {
+    media: { stream: { h264: [{ masterUrl: target, width: 1280, height: 720 }] } },
+    consumer: { originVideoKey: "synthetic-origin" }, downloadUrl: direct,
+    cover: { url: other }, recommended: { url: other }, bgm: { url: other },
+  } };
+  const parser = new XiaohongshuParser(); parser._extractNoteFromPage = async () => note;
+  const parsed = validateParsedVideo(await parser.parse(fakeBrowser(xhsUrl).manager, xhsUrl, options), "xiaohongshu");
+  assert.equal(parsed.mediaStreams[0].url, target);
+  assert.deepEqual(new Set(parsed.availableStreams.map((stream) => stream.url)), new Set([target, origin, direct]));
+  assert(parsed.availableStreams.every((stream) => stream.format === "mp4" && stream.type === "video+audio"));
+  const receipt = makeProviderResult({ url: xhsUrl, platform: "xiaohongshu" }, parsed);
+  assert.equal(receipt.native_id, xhsId); assert.equal(receipt.title, note.title); assert.equal(receipt.identity_verified, true);
+  assert.equal(parser._extractVideoUrl({ video: { url: direct } }), direct);
+  assert.equal(parser._extractVideoUrl({ video: { originVideoKey: origin } }), origin);
+});
+test("Xiaohongshu rejects HTTP, lookalike CDN hosts, image extensions and query-only video labels", () => {
+  const parser = new XiaohongshuParser();
+  const bad = [
+    "http://sns-video-bd.xhscdn.com/target.mp4", "https://evilxhscdn.com/target.mp4",
+    "https://xhscdn.com.evil.test/target.mp4", "https://evil.test/sns-video-bd.xhscdn.com/target.mp4",
+    "https://user@sns-video-bd.xhscdn.com/target.mp4", "https://sns-video-bd.xhscdn.com:8443/target.mp4",
+    "https://sns-video-bd.xhscdn.com/target.mp4#fragment", " https://sns-video-bd.xhscdn.com/target.mp4",
+    "https://sns-video-bd.xhscdn.com/cover.jpg", "https://sns-video-bd.xhscdn.com/cover%2Epng",
+    "https://sns-video-bd.xhscdn.com/cover.webp!format", "https://image.xhscdn.com/resource?label=sns-video",
+    "https://sns-video-bd.xhscdn.com/playlist.m3u8", "https://sns-video-bd.xhscdn.com/chunk.ts",
+  ];
+  for (const url of bad) {
+    assert.equal(parser._isVideoCdnUrl(url), false, url);
+    assert.deepEqual(parser._collectNoteMediaCandidates({ video: { url } }), [], url);
+    assert.deepEqual(parser._collectNoteMediaCandidates({ video: { media: { stream: { h264: [{ masterUrl: url }] } } } }), [], url);
+  }
+});
 test("Xiaohongshu accepts exact native note and its own stream", async () => {
   const fake = fakeBrowser(xhsUrl);
   const parser = new XiaohongshuParser(); parser._extractNoteFromPage = async () => xhsNote();
