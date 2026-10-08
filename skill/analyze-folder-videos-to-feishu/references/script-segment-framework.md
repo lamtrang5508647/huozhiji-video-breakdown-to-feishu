@@ -4,6 +4,25 @@ Use this mode when the user needs to understand a source video, choose a complet
 
 **whole-video framework → complete semantic script segment → shot group → single numbered source shot.** A visual cut alone does not create a new script segment. Keep connected arguments, paired comparisons, actions, and evidence together until the spoken task is complete.
 
+## 文本拆解：转写、标色与框架输出
+
+此流程用于默认的完整脚本拆解；只要求画面清单的任务仍走逐画面流程。转写、标色、框架是同一条源视频的三项交付，不能用其中一项代替另两项。
+
+1. **先准备原声文字。** 核对源视频身份、SHA-256、音轨和实际时长。已有转写先核对其来源与覆盖范围；没有可信转写且具备本地 ASR 时，运行下面的草稿命令。画面大字、字幕、口播可能不同，分别记录。ASR 时间只能作定位候选，不能直接当成逐字准确的剪辑边界。
+2. **逐句校对并留下状态。** 对照原声复核漏字、同音词、断句、说话人、品牌、成分、价格、数量、百分比及否定词；画面包装与上下文作辅助证据，不能靠常识补齐。听不清的地方保留明确疑点。保留原始草稿，校订版另存，并记录源音频/源视频哈希、转写版本、复核范围、修改和未决项。JSON 中的状态要随纯文字一并交付。`asr_draft`、`human_verified: false` 不得因程序通过而升级；真实逐句听校完成后，按下文的 `audio_review_evidence` 契约记录证据，只对实际复核的范围作完成声明。
+3. **按内容分析框架。** 从当前源文和原片证据总结整片实际顺序，再拆完整语义段，保留同一论点、对比、原因解释和证据链。每段注明脚本功能、源时间范围、相交画面编号，并写出具体的功能序列、可观察情绪及其依据、复刻填空句和拍法。原片结构公式忠实记录真实顺序；可复用变量公式写成可替换槽位，缺少产品事实或证据时保留待补槽位，不借用原片人物经历。
+4. **再做短语标色与固定排版。** 使用 [phrase-color-script-analysis.md](phrase-color-script-analysis.md) 与 v9/9.1 上下文合约，按短语实际功能标色，保留连续原文和图例。完整转写独立保存；当前呈现器的 `text_kind` 支持 `subtitle_excerpts`、`user_provided_copy`，不可把口播草稿伪装成字幕摘录或自造枚举。字幕与口播不同处明确标注，不静默替换已经绑定来源的 `source_text`。默认文档继续使用视频原标题 H1、公式/图例/语义段 H2，按产品 × 平台复用现有文档。
+
+在仓库根目录生成机器草稿的示例（`<job-dir>` 为独立任务目录；本地模型和 ASR 可执行程序须已配置）：
+
+```text
+python skill/analyze-folder-videos-to-feishu/scripts/offline_asr.py <source-audio.wav> --engine openai-whisper --model <local-model.pt> --output-dir <job-dir>/asr-draft
+```
+
+whisper.cpp 路径改用 `--engine whisper-cpp --model <local-model.bin> --whisper-cpp <executable>`。程序生成原始引擎 JSON、`transcript.json` 和 `transcript.txt`，规范化 JSON 明确标为 `transcript_status: asr_draft`、`human_verified: false`；它不执行逐句听校。缺少依赖、音轨或听校能力时报告受阻项，字幕分析可继续，但完整转写/原声校对仍为未验证。不要为了得到“完成”状态自动下载模型或编造口播。
+
+交付和写回时，完整原文只放在项目已有的原脚本字段或本地转写文件，时间定位和状态保存在配套记录；不混入分析标签、公式或改写句。标色分析、两类公式及段落指导写入当前视频的分析章节，素材片段继续链接源视频与语义段。已有字段由项目映射决定，此流程不自动新建重复表格、视图或逐视频文档。
+
 ## Evidence And Boundaries
 
 - Capture the source file SHA-256, exact duration, original source-video record (when supplied), and the existing reviewed shot manifest. Never modify the source or the old shot assets.
