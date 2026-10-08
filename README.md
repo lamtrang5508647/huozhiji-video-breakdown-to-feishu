@@ -1,4 +1,4 @@
-# Video Breakdown to Feishu
+# huozhiji · Video Breakdown to Feishu
 
 把带货视频拆成 **完整脚本框架 + 连续语义段 + 逐画面素材**，保留原文、时间线、
 短语标色、复用公式和证据，再按 **产品 → 平台 → 视频画廊** 归档到飞书。
