@@ -8,6 +8,7 @@ import { DouyinParser } from "../scripts/platforms/douyin.js";
 import { KuaishouParser } from "../scripts/platforms/kuaishou.js";
 import { XiaohongshuParser } from "../scripts/platforms/xiaohongshu.js";
 import { rejectAccessChallenge } from "../scripts/platforms/security.js";
+import { validateParsedVideo } from "../scripts/platforms/base.js";
 import { acquire, parseArgs, makeProviderResult, main } from "../../../scripts/browser_acquire.mjs";
 
 const options = { pageTimeoutMs: 50, mediaWaitMs: 1, downloadTimeoutMs: 50 };
@@ -20,7 +21,7 @@ function fakeBrowser(finalUrl, responses = [], body = "", pageState = null) {
     on: (_, listener) => listeners.add(listener), off: (_, listener) => listeners.delete(listener),
     goto: async () => { for (const item of responses) for (const listener of listeners) listener(item); await Promise.resolve(); await Promise.resolve(); },
     url: () => finalUrl, title: async () => { throw new Error("Unbound page title must not be used"); },
-    locator: () => ({ innerText: async () => body }), evaluate: async () => pageState,
+    locator: () => ({ innerText: async () => body }), evaluate: async (callback) => String(callback).includes("captcha_container") ? false : pageState,
   };
   let closed = false;
   const context = { newPage: async () => page, close: async () => { closed = true; } };
@@ -34,6 +35,8 @@ const douyinUrl = "https://www.douyin.com/video/123456789";
 test("Douyin takes only exact target detail streams and its description", async () => {
   const fake = fakeBrowser(douyinUrl, [response("https://www.douyin.com/aweme/v1/web/aweme/detail/", douyinDetail("999999999", "Recommended")), response("https://www.douyin.com/aweme/v1/web/aweme/detail/", douyinDetail("123456789"))]);
   const parsed = await new DouyinParser().parse(fake.manager, douyinUrl, options);
+  validateParsedVideo(parsed, "douyin");
+  assert(parsed.availableStreams.every((stream) => stream.format === "mp4"));
   assert.equal(parsed.videoId, "123456789"); assert.equal(parsed.title, "Target description"); assert.equal(parsed.titleKind, "description");
   assert(parsed.mediaStreams.every((item) => item.url.includes("123456789")));
   assert(fake.isClosed());
@@ -50,6 +53,54 @@ test("Douyin rejects changed target on redirect", async () => {
 test("Verification barrier blocks even when target media was observed", async () => {
   const fake = fakeBrowser(douyinUrl, [response("https://www.douyin.com/aweme/v1/web/aweme/detail/", douyinDetail("123456789"))], "请完成安全验证");
   await assert.rejects(new DouyinParser().parse(fake.manager, douyinUrl, options), { code: "ACCESS_BLOCKED" });
+});
+test("Douyin normal comment/optional HD login UI allows only exact target public media", async () => {
+  const body = "请先登录后发表评论 登录后免费畅享高清视频 扫码登录 验证码登录 密码登录 获取验证码";
+  const fake = fakeBrowser(douyinUrl, [response("https://www.douyin.com/aweme/v1/web/aweme/detail/", douyinDetail("123456789"))], body);
+  const parsed = await new DouyinParser().parse(fake.manager, douyinUrl, options);
+  assert.equal(parsed.videoId, "123456789"); assert.equal(parsed.title, "Target description");
+  await assert.rejects(new DouyinParser().parse(fakeBrowser(douyinUrl, [], body).manager, douyinUrl, options), { code: "ACCESS_BLOCKED" });
+  const unrelated = fakeBrowser(douyinUrl, [response("https://www.douyin.com/aweme/v1/web/aweme/detail/", douyinDetail("999999999"))], body);
+  await assert.rejects(new DouyinParser().parse(unrelated.manager, douyinUrl, options), { code: "ACCESS_BLOCKED" });
+});
+test("Douyin visible captcha, verify URL, risk header and real login wall still stop", async () => {
+  const parser = new DouyinParser();
+  for (const [body, url, flags] of [
+    ["验证码登录", douyinUrl, { visibleChallenge: true }],
+    ["", "https://www.douyin.com/verify", {}],
+    ["", douyinUrl, { riskControlled: true }],
+    ["请拖动滑块完成验证", douyinUrl, {}],
+    ["登录后才能观看", douyinUrl, {}],
+    ["请输入下图验证码", douyinUrl, {}],
+    ["登录后查看视频", douyinUrl, {}],
+  ]) assert.throws(() => parser._rejectAccessBarrier(body, url, { boundTargetMedia: true, ...flags }), { code: "ACCESS_BLOCKED" });
+  const fake = fakeBrowser(douyinUrl, [response("https://www.douyin.com/aweme/v1/web/aweme/detail/", douyinDetail("123456789"))], "验证码登录");
+  parser._hasVisibleChallenge = async () => true;
+  await assert.rejects(parser.parse(fake.manager, douyinUrl, options), { code: "ACCESS_BLOCKED" });
+});
+test("Douyin access inspection failures cannot exempt login UI", async () => {
+  const parser = new DouyinParser();
+  const responses = [response("https://www.douyin.com/aweme/v1/web/aweme/detail/", douyinDetail("123456789"))];
+  const fake = fakeBrowser(douyinUrl, responses, "验证码登录");
+  fake.page.evaluate = async () => { throw new Error("Fixture DOM unavailable"); };
+  await assert.rejects(parser.parse(fake.manager, douyinUrl, options), { code: "ACCESS_STATE_UNVERIFIED" });
+  const bodyFailure = fakeBrowser(douyinUrl, responses);
+  bodyFailure.page.locator = () => ({ innerText: async () => { throw new Error("Fixture body unavailable"); } });
+  await assert.rejects(parser.parse(bodyFailure.manager, douyinUrl, options), { code: "ACCESS_STATE_UNVERIFIED" });
+});
+test("Douyin current URL is rechecked after target detail observation", async () => {
+  const parser = new DouyinParser();
+  const fake = fakeBrowser(douyinUrl, [response("https://www.douyin.com/aweme/v1/web/aweme/detail/", douyinDetail("123456789"))], "验证码登录");
+  let reads = 0;
+  fake.page.url = () => ++reads > 1 ? "https://www.douyin.com/login" : douyinUrl;
+  await assert.rejects(parser.parse(fake.manager, douyinUrl, options), { code: "ACCESS_BLOCKED" });
+});
+test("Douyin normal login UI exemption cannot use failed detail or cover-only media", async () => {
+  const body = "请先登录后发表评论 验证码登录 获取验证码";
+  const failedDetail = douyinDetail("123456789"); failedDetail.status_code = 1;
+  await assert.rejects(new DouyinParser().parse(fakeBrowser(douyinUrl, [response("https://www.douyin.com/aweme/v1/web/aweme/detail/", failedDetail)], body).manager, douyinUrl, options), { code: "ACCESS_BLOCKED" });
+  const coverDetail = douyinDetail("123456789"); coverDetail.aweme_detail.video = { cover: { url_list: ["https://fixture.douyinvod.com/poster.mp4"] } };
+  await assert.rejects(new DouyinParser().parse(fakeBrowser(douyinUrl, [response("https://www.douyin.com/aweme/v1/web/aweme/detail/", coverDetail)], body).manager, douyinUrl, options), { code: "ACCESS_BLOCKED" });
 });
 const xhsId = "1234567890abcdef12345678";
 const xhsUrl = `https://www.xiaohongshu.com/explore/${xhsId}`;

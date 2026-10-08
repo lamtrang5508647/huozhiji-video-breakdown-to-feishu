@@ -40,7 +40,7 @@ export class DouyinParser extends PlatformParser {
     page.on("response", handleResponse);
     try {
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: options.pageTimeoutMs });
-      const finalUrl = page.url();
+      let finalUrl = page.url();
       if (!DouyinParser.matchesUrl(finalUrl)) throw identityError("Douyin redirect did not resolve to a supported video page");
       const inputId = this._extractVideoId(url);
       const targetId = this._extractVideoId(finalUrl);
@@ -49,21 +49,33 @@ export class DouyinParser extends PlatformParser {
       const deadline = Date.now() + options.mediaWaitMs;
       while (!details.has(targetId) && Date.now() < deadline) await sleep(100);
       await settleWithin(Promise.allSettled([...tasks]), 2000);
-      const bodyText = await page.locator("body").innerText({ timeout: 3000 }).catch(() => "");
-      rejectAccessChallenge(bodyText, finalUrl, riskControlled);
+      const bodyText = await page.locator("body").innerText({ timeout: 3000 }).catch(() => {
+        throw this._accessStateUnverified("Could not read Douyin content-access state");
+      });
+      const currentUrl = page.url();
+      const json = details.get(targetId);
+      const rawCandidates = [];
+      const targetDetailMatches = String(json?.aweme_detail?.aweme_id ?? "") === targetId;
+      const statusError = targetDetailMatches ? this._classifyDetailStatus(json) : null;
+      if (targetDetailMatches) this._collectMediaUrls(json, rawCandidates);
+      const candidates = rawCandidates.map((candidate) => this._normalizeCandidate(candidate)).filter(Boolean);
+      const mediaAlternatives = this._buildMediaAlternatives(candidates);
+      this._rejectAccessBarrier(bodyText, currentUrl, {
+        riskControlled,
+        visibleChallenge: await this._hasVisibleChallenge(page),
+        boundTargetMedia: targetDetailMatches && !statusError && mediaAlternatives.length > 0,
+      });
+      if (!DouyinParser.matchesUrl(currentUrl)) throw identityError("Douyin page moved away from the target while waiting for detail");
+      requireSameNativeId(targetId, this._extractVideoId(currentUrl), "Douyin current page");
+      finalUrl = currentUrl;
       if (/作品不存在|视频不见了|已删除|暂无权限|私密作品/u.test(bodyText)) {
         throw new PlatformError("Douyin target is unavailable", { code: "CONTENT_UNAVAILABLE", category: "content", permanent: true });
       }
-      const json = details.get(targetId);
       if (!json) throw identityError("No exact Douyin target detail response; runtime/recommendation media rejected");
       requireSameNativeId(targetId, json.aweme_detail?.aweme_id, "Douyin detail");
-      const statusError = this._classifyDetailStatus(json);
       if (statusError) throw statusError;
-      const candidates = [];
-      this._collectMediaUrls(json, candidates);
       const unsupported = this._classifyUnsupportedDetail(json, finalUrl, candidates);
       if (unsupported) throw unsupported;
-      const mediaAlternatives = this._buildMediaAlternatives(candidates);
       if (!mediaAlternatives.length) throw identityError("Exact Douyin target detail contains no bound playable streams");
       const meta = this._extractDetailMeta(json);
       const detail = json.aweme_detail;
@@ -85,6 +97,53 @@ export class DouyinParser extends PlatformParser {
       await settleWithin(Promise.allSettled([...tasks]), 2000);
       await settleWithin(context.close(), 5000);
     }
+  }
+
+  async _hasVisibleChallenge(page) {
+    // Match verification widgets, not a login modal's SMS-code input or login tabs.
+    const visible = await page.evaluate(() => {
+      const selectors = [
+        "#captcha_container", "#captcha_verify_container", ".captcha-verify-container",
+        ".captcha_verify_container", ".secsdk-captcha-drag-wrapper",
+        ".secsdk-captcha-drag-icon", '[data-testid="captcha-container"]',
+      ];
+      return selectors.some((selector) => [...document.querySelectorAll(selector)].some((element) => {
+        const style = window.getComputedStyle(element);
+        const bounds = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) !== 0 && bounds.width > 0 && bounds.height > 0;
+      }));
+    }).catch(() => {
+      throw this._accessStateUnverified("Could not inspect Douyin verification widgets");
+    });
+    if (typeof visible !== "boolean") throw this._accessStateUnverified("Douyin verification inspection returned no definitive state");
+    return visible;
+  }
+
+  _accessStateUnverified(message) {
+    return new PlatformError(message, {
+      code: "ACCESS_STATE_UNVERIFIED", category: "access", permanent: true, retryable: false,
+      userMessage: "无法核实抖音访问门槛，已停止提取。",
+    });
+  }
+
+  _rejectAccessBarrier(bodyText, finalUrl, { riskControlled = false, visibleChallenge = false, boundTargetMedia = false } = {}) {
+    const text = String(bodyText ?? "");
+    let challengePath = false;
+    try { challengePath = /\/(?:login|passport|captcha|verify)(?:[/?#]|$)/i.test(new URL(finalUrl).pathname); } catch {}
+    const hardChallenge = /安全验证|请完成(?:安全)?验证|完成验证|拖动(?:下方)?(?:滑块|图片)|向右滑动|滑块验证|人机验证|拼图验证|旋转(?:图片|验证)|(?:下图|图片|图形)验证码|访问受限|访问频次|captcha|verify you are human/i.test(text);
+    const actualLoginWall = /登录后(?:才(?:能|可)|方可)?(?:观看|播放|查看)|请先登录(?:后)?(?:观看|播放|查看(?:此|该|完整)?(?:视频|作品))/u.test(text);
+    if (riskControlled || visibleChallenge || challengePath || hardChallenge || actualLoginWall) {
+      throw new PlatformError("Douyin verification or content-access barrier; acquisition stopped", {
+        code: "ACCESS_BLOCKED", category: "access", permanent: true, retryable: false,
+        userMessage: "抖音存在真实验证、风控或视频访问障碍，已停止提取。",
+      });
+    }
+    // Ordinary comment/HD login prompts are excluded only after exact target detail
+    // supplies its own playable public streams. No cookies or gated HD stream is acquired.
+    const checkedText = boundTargetMedia
+      ? text.replace(/请先登录后发表评论|登录后免费畅享高清视频|验证码登录|获取验证码/gu, "")
+      : text;
+    rejectAccessChallenge(checkedText, finalUrl, riskControlled);
   }
 
   _classifyDetailStatus(json) {
