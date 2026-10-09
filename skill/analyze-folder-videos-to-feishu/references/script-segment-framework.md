@@ -41,7 +41,7 @@ Each script-segment record should include:
 - stable ID, ordinal, name, source time range, primary semantic source groups, source-shot IDs and exact intersection spans;
 - source excerpt with per-shot provenance and an explicit `subtitle_excerpts_only` type unless a transcript has separate human review evidence;
 - the segment's source role, source structure, central question, and source claims;
-- the observable source-emotion arc as **starting expression → trigger → turn → landing**, with the triggering shot or subtitle evidence at every stage;
+- observable source-emotion events with their actual time and shot/subtitle evidence; new records explicitly distinguish observed changes, no clear change, and insufficient evidence. Legacy reviewed **starting expression → trigger → turn → landing** records remain compatible; do not invent four stages for a neutral passage;
 - a separate audience-response hypothesis, clearly marked as an inference rather than measured response;
 - observable emotion tags and one script-function value in separate taxonomies;
 - reusable structure, fill-in slots, example sentence slots, required target-product facts, and conditions for reuse;

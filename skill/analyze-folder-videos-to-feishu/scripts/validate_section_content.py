@@ -2,9 +2,12 @@
 import argparse
 import hashlib
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from emotion_progression import validate_authoring
 
 def read(path):
     return json.loads(Path(path).read_text(encoding="utf-8-sig"))
@@ -36,7 +39,7 @@ def check(content, timeline, timeline_sha256):
             require(isinstance(section.get(field), str) and bool(section[field].strip()),
                     f"{label} {field}: expected specific readable text")
         start, end = section.get("start_ms"), section.get("end_ms")
-        valid_range = (isinstance(start, int) and isinstance(end, int)
+        valid_range = (type(start) is int and type(end) is int
                        and 0 <= start < end)
         require(valid_range, f"{label}: invalid interval")
         if not valid_range:
@@ -48,29 +51,14 @@ def check(content, timeline, timeline_sha256):
                           if s["start_ms"] < end and s["end_ms"] > start]
         require(section.get("source_shot_ids") == expected_shots,
                 f"{label}: source_shot_ids must equal current intersecting shots in order")
-        arc = section.get("arc", [])
-        require(isinstance(arc, list) and len(arc) == 4,
-                f"{label}: arc needs exactly four stages; never truncate with zip")
         normalized = []
-        last_time = -1
-        for stage, event in enumerate(arc if isinstance(arc, list) else [], 1):
-            event_label = f"{label} arc {stage}"
-            if not isinstance(event, dict):
-                require(False, f"{event_label}: expected time_ms, evidence_shot_id, expression")
-                continue
-            ms, sid = event.get("time_ms"), event.get("evidence_shot_id")
-            require(isinstance(event.get("expression"), str) and bool(event["expression"].strip()),
-                    f"{event_label}: missing observable source expression")
-            valid_time = isinstance(ms, int) and start <= ms < end
-            require(valid_time, f"{event_label}: evidence time outside semantic section")
-            if isinstance(ms, int):
-                require(ms >= last_time, f"{event_label}: events out of order")
-                last_time = ms
-            shot = shots.get(sid)
-            require(bool(shot) and valid_time and shot["start_ms"] <= ms < shot["end_ms"],
-                    f"{event_label}: evidence shot/time mismatch after timeline revision")
-            if valid_time and isinstance(event.get("expression"), str):
-                normalized.append([ms / 1000, event["expression"]])
+        try:
+            emotion = validate_authoring(section, {sid: (shot["start_ms"], shot["end_ms"])
+                                                   for sid, shot in shots.items()})
+            normalized = [[event["evidence_time_ms"] / 1000, event["observable"]]
+                          for event in emotion["events"]]
+        except ValueError as exc:
+            errors.append(f"{label}: {exc}")
         normalized_arcs.append(normalized)
     require(previous == round(timeline["duration_sec"] * 1000),
             "Semantic sections must cover the source duration")
@@ -88,6 +76,8 @@ def check(content, timeline, timeline_sha256):
             "Machine word alignment needs explicit method and a source-bound receipt")
     return {"status": "FAIL" if errors else "PASS", "errors": errors,
             "sections": len(sections), "normalized_arcs": normalized_arcs,
+            "emotion_evidence_incomplete": [index + 1 for index, section in enumerate(sections)
+                if section.get("emotion_progression_status") == "insufficient_evidence"],
             "publication_ready": False, "content_review_required": True,
             "scope": "Authoring schema, source references and repeated boilerplate only; "
                      "source meaning, imagery, sound and effectiveness still require review"}

@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from emotion_progression import manifest_emotion
 
 class InvalidManifest(ValueError):
     pass
@@ -142,8 +144,6 @@ def validate(data: dict, manifest_path: Path, timeline_override: Path | None, ff
         for tag in segment.get("emotion_tags", []):
             fail_if(tag not in expected_emotions, f"{label} has an emotion tag absent from manifest options: {tag}")
         fail_if(segment.get("script_function") not in expected_functions, f"{label} has an unknown script function")
-        arc = segment.get("emotion", {}).get("observable_timeline", [])
-        fail_if([item.get("stage") for item in arc] != ["起点", "触发", "转折", "落点"], f"{label} emotion arc must contain start/trigger/turn/landing evidence")
         excerpt = segment.get("source_excerpt", {})
         fail_if(excerpt.get("type") != "subtitle_excerpts_only", f"{label} source_excerpt must identify its evidence type")
         spans = segment.get("source_shot_spans", [])
@@ -168,9 +168,11 @@ def validate(data: dict, manifest_path: Path, timeline_override: Path | None, ff
         fail_if(span_ids != expected_segment_shots, f"{label} source_shot_spans must equal all source shots that actually intersect this interval")
         fail_if(set(segment.get("source_shot_ids", [])) != span_ids, f"{label} source_shot_ids differ from source_shot_spans")
         fail_if(len(segment.get("source_shot_ids", [])) != len(set(segment.get("source_shot_ids", []))), f"{label} repeats source_shot_ids")
-        for arc_item in arc:
-            refs = set(arc_item.get("evidence_shot_ids", []))
-            fail_if(not refs or not refs.issubset(span_ids), f"{label} emotion arc stage {arc_item.get('stage')} lacks in-segment shot evidence")
+        try:
+            manifest_emotion(segment, {sid: (shot["start_ms"], shot["end_ms"])
+                                       for sid, shot in shot_by_id.items()})
+        except ValueError as exc:
+            raise InvalidManifest(f"{label}: {exc}") from exc
         for context in segment.get("boundary_context", []):
             fail_if(context.get("source_group_id") in primary_groups, f"{label} boundary context must not also be a primary source group")
             fail_if(not context.get("source_shot_spans"), f"{label} boundary context needs intersecting source spans")
@@ -213,6 +215,8 @@ def validate(data: dict, manifest_path: Path, timeline_override: Path | None, ff
         "source_fps": round(fps, 6),
         "max_claimed_frame_quantization_delta_ms": round(quantization_delta_max_ms, 3),
         "audio_review_status": audio_status,
+        "emotion_evidence_incomplete": [s["id"] for s in segments
+            if s.get("emotion", {}).get("progression_status") == "insufficient_evidence"],
         "review_receipt_sha256": root_review_sha,
     }
 

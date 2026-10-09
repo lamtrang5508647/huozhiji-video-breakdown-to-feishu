@@ -19,6 +19,7 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from phrase_annotation import (DEFINITIONS, PROFILE, is_v9, reading_runs as reviewed_reading_runs,
                                validate_annotations, validate_runs)
+from emotion_progression import LEGACY_STAGES, match_authoring, progression_label, event_label
 
 
 FAMILIES = {
@@ -31,7 +32,7 @@ FAMILIES = {
     "action_cta": (None, DEFINITIONS['action_cta']),
     "unclassified": ("gray", DEFINITIONS['unclassified']),
 }
-STAGES = ("起点", "触发", "转折", "落点")
+STAGES = LEGACY_STAGES
 NATIVE_COLORS = {'red': 'rgb(216,57,49)', 'green': 'rgb(46,161,33)',
                  'blue': 'rgb(36,91,219)', 'purple': 'rgb(100,37,208)',
                  'orange': 'rgb(222,120,2)', 'gray': 'rgb(143,149,158)',
@@ -41,6 +42,10 @@ NATIVE_COLORS = {'red': 'rgb(216,57,49)', 'green': 'rgb(46,161,33)',
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def readable(value, label):
+    require(isinstance(value, str) and bool(value.strip()), f"{label} must be readable text")
 
 
 def esc(value):
@@ -101,6 +106,10 @@ def reading_runs(unit, *, strict=False):
 
 def validate_inputs(analysis, manifest, content, materials_url, segments_url):
     annotation_receipt = validate_annotations(analysis, content)
+    mode = content.get('analysis_mode', 'legacy')
+    require(mode in ('legacy', 'qianchuan_deep'), "Unknown analysis_mode")
+    if mode == 'qianchuan_deep':
+        readable(content.get('strategy'), 'Deep analysis strategy')
     checked_url(materials_url)
     checked_url(segments_url)
     require(materials_url != segments_url, "Material and segment navigation must be distinct")
@@ -135,11 +144,13 @@ def validate_inputs(analysis, manifest, content, materials_url, segments_url):
         require(seg['start_ms'] < seg['end_ms'], "Empty segment interval")
         require(bool(seg['source_group_ids']) and bool(seg['source_shot_ids']), "Source mapping missing")
         require(seg['script_function'] == detail['function'], "Script function mismatch")
-        arc = seg['emotion']['observable_timeline']
-        require([a['stage'] for a in arc] == list(STAGES), "Four observed emotion stages required")
-        for item in arc:
-            require(bool(item['observable']) and bool(item['evidence_shot_ids']), "Emotion evidence missing")
-            require(seg['start_ms'] <= item['evidence_time_ms'] < seg['end_ms'], "Emotion evidence outside segment")
+        if mode == 'qianchuan_deep':
+            for field, source in (('question', 'core_question'), ('role', 'role'), ('structure', 'source_structure')):
+                readable(detail.get(field), f'Deep analysis {field}')
+                readable(seg.get(source), f'Manifest {source}')
+                require(detail[field] == seg[source], f'Deep analysis {field} differs from manifest: {seg["id"]}')
+            readable(detail.get('conditions'), 'Deep analysis reuse conditions')
+        match_authoring(seg, detail)
         selected = [u for u in units if u['section_id'] == seg['id']]
         expected = seg['source_excerpt']['items']
         require(len(selected) == len(expected), f"Subtitle item count mismatch: {seg['id']}")
@@ -164,6 +175,7 @@ def validate_inputs(analysis, manifest, content, materials_url, segments_url):
 
 def _render(analysis, manifest, content, materials_url, segments_url):
     profile = analysis.get('annotation_profile')
+    deep = content.get('analysis_mode') == 'qianchuan_deep'
     def formula(steps):
         return ' → '.join(color_runs(s['phrase_runs'], profile=profile) if 'phrase_runs' in s
                           else color(s['label'], s['category_family'], profile=profile) for s in steps)
@@ -180,6 +192,7 @@ def _render(analysis, manifest, content, materials_url, segments_url):
            + '<b>脚本段视频：</b><a href="' + esc(segments_url) + '">查看'
            + str(len(manifest['segments'])) + '个内容段视频</a></p>',
            '<h2>原片结构公式</h2>', '<p>' + formula(analysis['source_formula']) + '</p>',
+           *([paragraph('原片表达策略：', content['strategy'])] if deep else []),
            '<p>这是源片表达顺序；经历、机制、效果和认证说法属于源片主张，未因此获得事实验证。</p>',
            '<h2>可复用变量公式</h2>', '<p>' + formula(analysis['reusable_formula']) + '</p>',
            '<p>复用表达顺序和待填变量；不移植本片品牌、产品、疗效、研究、经历或入口，缺少真实材料时不得编造。</p>',
@@ -200,10 +213,16 @@ def _render(analysis, manifest, content, materials_url, segments_url):
         sequence = [s for s in analysis['source_formula'] if s['section_id'] == seg['id']]
         require(bool(sequence), f"Source functional sequence missing: {seg['id']}")
         out.append('<p><b>本段源片功能序列：</b>' + formula(sequence) + '</p>')
-        arc = ' → '.join(a['stage'] + ' ' + tc(a['evidence_time_ms']) + '：' + a['observable']
+        if deep:
+            out.append(paragraph('本段回应的问题：', detail['question']))
+            out.append(paragraph('本段表达作用（非效果验证）：', detail['role']))
+            out.append(paragraph('论证与声画关系：', detail['structure']))
+        arc = ' → '.join(event_label(a, i) + ' ' + tc(a['evidence_time_ms']) + '：' + a['observable']
                          + '（' + '、'.join(display_shot(s) for s in a['evidence_shot_ids']) + '）'
-                         for a in seg['emotion']['observable_timeline'])
-        out.append(paragraph('原片情绪观察（段级）：', '、'.join(detail['tags']) + '；推进：' + arc
+                         for i, a in enumerate(seg['emotion']['observable_timeline']))
+        label = progression_label(seg['emotion'])
+        observation = (label + '；观察记录：' + (arc or '未明确，暂无可核对事件')) if label else '推进：' + arc
+        out.append(paragraph('原片情绪观察（段级）：', '、'.join(detail['tags']) + '；' + observation
                              + '；依据为可观察字幕/画面，不等同于真实心理判断。'))
         shots = seg['source_shot_ids']
         out.append(paragraph('源画面范围：', shot_range(shots)))
@@ -217,6 +236,8 @@ def _render(analysis, manifest, content, materials_url, segments_url):
         out.append('<p><b>复用公式：</b>' + rendered_formula + '</p>')
         out.append(paragraph('填空句式：', detail['slots']))
         out.append(paragraph('复刻镜头建议：', detail['shoot']))
+        if deep:
+            out.append(paragraph('复用边界：', detail['conditions']))
     out.append(paragraph('复刻方向：', content['replication_outline']))
     return '\n'.join(out) + '\n'
 

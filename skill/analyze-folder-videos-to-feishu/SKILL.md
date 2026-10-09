@@ -27,7 +27,7 @@ Process videos one at a time from the user's explicit source and target. Keep an
 
 委派给较小模型时，先读 [execution-quality-contract.md](references/execution-quality-contract.md)，做有来源证据的小样并独立复核；通过后再展开。不能让模型自行宣布与其他模型能力相同。
 
-脚本段输入先运行 `validate_section_content.py`：绑定当前时间线哈希，逐段具体写填空句和拍法，四阶段情绪依据必须落在所引镜头内。重复整段套话、旧镜头引用、多余阶段被截断均退回；通过此检查仍需独立内容复核。
+脚本段输入先运行 `validate_section_content.py`：绑定当前时间线哈希，逐段具体写填空句和拍法，实际情绪事件须落在所引镜头内。新数据显式区分实际变化、无明显变化和证据不足，旧四阶段数据保持兼容；不强补转折，也不截断事件。重复整段套话、旧镜头引用、状态不一致均退回；通过此检查仍需独立内容复核。
 
 **句内标色使用 v9 合约与 9.1 上下文复核。** 先读 [phrase-annotation-v9.md](references/phrase-annotation-v9.md)、[context-calibration.md](references/context-calibration.md) 和 [context-review.md](references/context-review.md)。每条字幕、整片公式和段内公式必须明确审阅短语功能及其上下文，再交给统一渲染器；禁止用镜头编号范围、段标签、关键词或缺省颜色覆盖整句。逐句记录阅读理由、相邻语境与保留/修改决定；9.1 发布须提交绑定当前输入哈希的 `context-review.json`，不能仅写“全部已审核”。`phrase_annotation.py` 和 `context_review.py` 只检查来源、字符、标签与审阅记录，不判定含义正确。执行模型不得把结构检查 PASS 改写成“语义审核通过”；发布前监督者须裁定争议、核对原文和公式及跨视频同类表达。钩子与惊讶反应、信息与评价、出处与结果、已发生体验与未来计划分别判断；不得仅因处在开头就整段标红，也不得把灰色当难句的缺省颜色。
 
@@ -48,6 +48,8 @@ For a packaged project or a request to continue earlier breakdowns, read [refere
 The two linked deliverables are complete script analysis/semantic segment clips and a numbered shot-material library. Document updates and Base upload are agent-operated through current Feishu tools, not an unattended end-to-end pipeline. Read [references/document-access.md](references/document-access.md) before creating or transferring a project document so the intended human can edit it.
 
 ## Choose The Workflow First
+
+用户要结合千川信息流带货深入拆解、复刻脚本或提升素材调用时，先读 [references/qianchuan-deep-breakdown.md](references/qianchuan-deep-breakdown.md)。在原文、语义段、逐画面基础上分析购买情境、信息推进、主张与展示材料、声画关系、行动承接及有条件的复用；不要只加标签或套统一销售公式。用既有字段和 `analysis_mode: qianchuan_deep` 显示具体问题、作用、论证/声画关系和复用条件，不新增逐视频文档。情绪按实际变化记录，原作者主张不等于证据已验证。纯整理与深拆不进入 AI 任务台、生成服务或广告投放。
 
 用户明确要求新建产品 AI 素材任务子表、倒推逐镜头提示词并保留产品参考与生成结果时，读 [references/ai-material-taskboard.md](references/ai-material-taskboard.md)。仅整理任务不提交生成；缺失本品包装/剂型参考不妨碍建表和写条件提示词，但必须保留具体待补状态。新表是明确要求的生产任务台，不自动扩展为全库复制。
 
