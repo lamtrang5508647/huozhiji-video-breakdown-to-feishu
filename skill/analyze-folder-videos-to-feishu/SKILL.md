@@ -11,6 +11,8 @@ Process videos one at a time from the user's explicit source and target. Keep an
 
 默认每条视频交付两层：完整脚本框架/连续语义段，以及逐画面视频素材库。**文档存在不代表素材已交付；关键帧不能代替视频。**
 
+后续新做的带货视频完整脚本拆解，默认采用 [千川深拆方法](references/qianchuan-deep-breakdown.md)，新 authoring 使用 `analysis_mode: qianchuan_deep`，无需用户再次提出千川。仅要逐画面清单时按该清单交付；已保存的旧章节不自动改写。
+
 **默认脚本拆解包含三项文字交付，不能只交素材切片：**
 
 | 交付 | 内容和边界 |
