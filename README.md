@@ -1,5 +1,9 @@
 # huozhiji · Video Breakdown to Feishu
 
+<!-- release-version:start -->
+当前版本 **v1.0.0** · 第 **001** 次正式版本迭代（2026-10-10）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
+<!-- release-version:end -->
+
 把带货视频拆成 **完整脚本框架 + 连续语义段 + 逐画面素材**，保留原文、时间线、
 短语标色、复用公式和证据，再按 **产品 → 平台 → 视频画廊** 归档到飞书。
 

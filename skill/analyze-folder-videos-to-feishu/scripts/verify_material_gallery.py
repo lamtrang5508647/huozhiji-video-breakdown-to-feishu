@@ -9,6 +9,28 @@ def mapped_schema(raw, table):
 def field_ref(schema,name):
  return schema.get(name,{}).get("id",name)
 
+def planned_segment_links(plan, state, material_keys):
+    segments = {item['key']: item for item in plan['segments']}
+    assert len(segments) == len(plan['segments']), 'Duplicate segment plan key'
+    journal = state['records']['segments']
+    assert set(journal) == set(segments), 'Journaled segment keys do not match plan'
+    links = {key: set() for key in material_keys}
+    record_ids = set()
+    for key, segment in segments.items():
+        entry = journal[key]
+        record_id = entry['record_id'] if isinstance(entry, dict) else entry
+        assert isinstance(record_id, str) and record_id.startswith('rec'), f'Invalid segment record ID: {key}'
+        assert record_id not in record_ids, 'Duplicate segment record ID in journal'
+        record_ids.add(record_id)
+        shot_keys = segment.get('source_shot_keys')
+        assert isinstance(shot_keys, list) and shot_keys and all(isinstance(shot, str) for shot in shot_keys), f'Segment {key} must contain source_shot_keys'
+        assert len(set(shot_keys)) == len(shot_keys), f'Segment {key} repeats a source shot key'
+        assert set(shot_keys) <= material_keys, f'Segment {key} references material keys absent from this plan'
+        for shot_key in shot_keys:
+            links[shot_key].add(record_id)
+    assert all(links.values()), 'Material has no planned semantic segment'
+    return links, record_ids
+
 def main():
  p=argparse.ArgumentParser(description=__doc__)
  for n in ['project','workspace','plan','state','output']:p.add_argument('--'+n,required=True,type=pathlib.Path)
@@ -19,6 +41,7 @@ def main():
  assert plan['base_id']==profile['base_id'];assert state.get('pending') is None,'Upload pending; no completion claim'
  expected={x['key']:x for x in plan['materials']};assert len(expected)==len(plan['materials']) and expected
  assert set(state['records']['materials'])==set(expected),'Not all planned material rows are journaled'
+ expected_segment_links,planned_segments=planned_segment_links(plan,state,set(expected))
  assert state['main_fields_verified'],'Parent record is not verified'
  a=Lark(profile['base_id'],profile['identity'],args.workspace.resolve(),args.ignore_proxy_env)
  table=profile['tables']['materials']['id'];main=profile['tables']['videos']['id'];schema=mapped_schema(a.fields(table),profile['tables']['materials']);main_schema=mapped_schema(a.fields(main),profile['tables']['videos'])
@@ -66,7 +89,8 @@ def main():
   if args.archive_zone:
    assert (cell_text(f.get('选材分区'))==args.archive_zone)==(row['record_id'] in archive_record_ids),'Archived clip leaked into gallery or nonarchive clip hidden'
   assert plan['source_record_id'] in id_list(f.get('原视频关联'),'source link')
-  assert id_list(f.get('所属脚本段'),'semantic link'),'Material has no semantic segment link'
+  actual_segments=set(id_list(f.get('所属脚本段'),'semantic link'))
+  assert actual_segments==expected_segment_links[key],('Material semantic segment links do not match plan',key,sorted(expected_segment_links[key]),sorted(actual_segments))
   attachments=f.get('素材附件');assert isinstance(attachments,list) and attachments,'Actual video missing'
   wanted={pathlib.Path(x['path']).name for x in expected[key]['attachments'] if x['field']=='素材附件'}
   names={x.get('name',x.get('file_name','')) for x in attachments};assert wanted<=names,('Wrong gallery attachment',key,wanted,names)
@@ -76,8 +100,7 @@ def main():
  parent=a.get(main,plan['source_record_id'],['画面素材','脚本段','所属产品'],main_schema)['fields']
  assert set(found.values())|set(archived.values())<=set(id_list(parent.get('画面素材'),'parent material links'))
  assert plan['product_record_id'] in id_list(parent.get('所属产品'),'parent product')
- planned_segments={x['record_id'] if isinstance(x,dict) else x for x in state['records']['segments'].values()}
- assert len(planned_segments)==len(plan['segments']) and planned_segments<=set(id_list(parent.get('脚本段'),'parent semantic links'))
+ assert planned_segments<=set(id_list(parent.get('脚本段'),'parent semantic links'))
  result={'status':'live_gallery_membership_passed','video_id':plan['video_id'],'source_sha256':plan['source_sha256'],'plan_sha256':hashlib.sha256(args.plan.read_bytes()).hexdigest(),'view_id':args.view_id,'product_code':args.product_code,'platform':args.platform,'materials_visible':len(found),'materials_archived_verified':len(archived),'archive_zone':args.archive_zone,'semantic_segments_linked':len(planned_segments),'cover_field':cover['cover_field'],'all_gallery_rows':gallery_count,'ui_playback_verified':False,'attachment_remote_bytes_sha256_verified':False}
  atomic_json(args.output,result);print(json.dumps(result,ensure_ascii=False))
 if __name__=='__main__':

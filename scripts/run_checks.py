@@ -10,6 +10,9 @@ import subprocess
 import sys
 import unittest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from versioning import check as check_version
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "skill/analyze-folder-videos-to-feishu/scripts"
 
@@ -27,6 +30,15 @@ def main() -> int:
     parser.add_argument("--media", action="store_true", help="Also require PyAV/Pillow and run actual PTS decoder regression")
     parser.add_argument("--output", type=Path, help="Optional local JSON test receipt")
     args = parser.parse_args()
+    try:
+        release = check_version(ROOT)
+    except (ValueError, OSError) as exc:
+        receipt = {"status": "FAIL", "stage": "version_consistency", "error": str(exc)}
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(receipt, ensure_ascii=False, indent=2))
+        return 1
     sys.dont_write_bytecode = True
     sys.path.insert(0, str(SCRIPTS))
     suite = unittest.defaultTestLoader.discover(str(ROOT / "tests"), pattern="test_*.py")
@@ -40,6 +52,7 @@ def main() -> int:
         media = "PASS" if command.returncode == 0 else "FAIL"
     passed = result.wasSuccessful() and media != "FAIL"
     receipt = {
+        "release": release,
         "status": "PASS" if passed else "FAIL", "tests_run": result.testsRun,
         "failures": len(result.failures), "errors": len(result.errors),
         "skipped": [{"test": str(test), "reason": reason} for test, reason in result.skipped],

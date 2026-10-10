@@ -94,20 +94,22 @@ class ProjectCliTests(unittest.TestCase):
         (source / "agents").mkdir(parents=True)
         (source / "__pycache__").mkdir()
         (source / "SKILL.md").write_text("fixture skill", encoding="utf-8")
+        shutil.copyfile(ROOT / "VERSION.json", source / "VERSION.json")
         (source / "agents/local-project.json").write_text("private locator", encoding="utf-8")
         (source / "__pycache__/cached.pyc").write_bytes(b"cache")
         args = argparse.Namespace(dest=self.root / "installed")
         with patch.object(project, "SKILL", source):
             receipt = project.install_skill(args)
             self.assertEqual(receipt["status"], "installed_and_hash_verified")
-            self.assertEqual(receipt["files"], 1)
+            self.assertEqual(receipt["files"], 2)
+            self.assertEqual(receipt["release"], project.read_release(ROOT))
             self.assertFalse((args.dest / "agents/local-project.json").exists())
             self.assertFalse((args.dest / "__pycache__").exists())
             with self.assertRaisesRegex(ValueError, "already exists"):
                 project.install_skill(args)
 
     def test_each_command_has_help(self):
-        for name in ("init", "doctor", "demo", "install-skill", "acquire"):
+        for name in ("init", "doctor", "demo", "install-skill", "acquire", "version"):
             with self.subTest(command=name):
                 result = subprocess.run([sys.executable, "-B", ROOT / "scripts/project.py", name, "--help"],
                                         capture_output=True, text=True, encoding="utf-8")
@@ -118,6 +120,7 @@ class ProjectCliTests(unittest.TestCase):
         source = self.root / "extractor"
         source.mkdir()
         (source / "SKILL.md").write_text("extractor fixture", encoding="utf-8")
+        shutil.copyfile(ROOT / "VERSION.json", source / "VERSION.json")
         (source / "scripts").mkdir()
         (source / "scripts/acquire.py").write_text("# retained source", encoding="utf-8")
         (source / "vendor").mkdir()
@@ -133,9 +136,9 @@ class ProjectCliTests(unittest.TestCase):
         with patch.object(project, "ACQUIRE_SKILL", source):
             result = project.install_skill(args)
         self.assertEqual(result["skill"], "video-link-extractor")
-        self.assertEqual(result["files"], 3)
+        self.assertEqual(result["files"], 4)
         self.assertEqual(sorted(str(p.relative_to(args.dest)).replace("\\", "/") for p in args.dest.rglob("*") if p.is_file()),
-                         ["SKILL.md", "scripts/acquire.py", "vendor/package.json"])
+                         ["SKILL.md", "VERSION.json", "scripts/acquire.py", "vendor/package.json"])
         self.assertFalse(result["runtime_installed"])
 
     def test_installer_parser_default_remains_existing_skill(self):

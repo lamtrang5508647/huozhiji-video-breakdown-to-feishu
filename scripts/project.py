@@ -13,6 +13,9 @@ import subprocess
 import sys
 from urllib.parse import urlsplit
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from versioning import read_release
+
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skill" / "analyze-folder-videos-to-feishu"
 ACQUIRE_SKILL = ROOT / "skill" / "video-link-extractor"
@@ -155,7 +158,7 @@ def doctor(args) -> dict:
                         "state_files_present": all((root / config.get(key, "")).is_file() for key in ("registry_path", "video_index_path"))}
         if not config_check["state_files_present"]:
             missing.append("project: declared state files are missing")
-    return {"status": "PASS" if not missing else "MISSING_DEPENDENCIES", "python": sys.version.split()[0],
+    return {"status": "PASS" if not missing else "MISSING_DEPENDENCIES", "release": read_release(ROOT), "python": sys.version.split()[0],
             "selected_features": sorted(selected), "commands": commands, "python_modules": modules,
             "node_modules": {"playwright": playwright},
             "browser": browser, "project": config_check, "missing": missing,
@@ -174,6 +177,9 @@ def install_skill(args) -> dict:
         raise ValueError("Install destination must be separate from the repository skill source")
     if not (source_root / "SKILL.md").is_file():
         raise ValueError("Bundled skill source is missing")
+    release = read_release(ROOT)
+    if read_release(source_root) != release:
+        raise ValueError("Skill version mismatch; run scripts/versioning.py check before installing")
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", "local-project.json", ".DS_Store",
                                     "node_modules", "browser-state*", "storage-state*", "cookies*", "credentials*", ".env*",
                                     "cache", "caches", ".cache", "*-cache", ".pytest_cache", ".mypy_cache", ".ruff_cache",
@@ -188,7 +194,7 @@ def install_skill(args) -> dict:
                 raise ValueError(f"Installed file failed readback: {copied.name}")
             count += 1
     return {"status": "installed_and_hash_verified", "skill": name, "destination": str(destination), "files": count,
-            "runtime_installed": False, "credentials_included": False}
+            "release": release, "runtime_installed": False, "credentials_included": False}
 
 
 def demo(args) -> dict:
@@ -209,7 +215,10 @@ def acquire(arguments: list[str]) -> int:
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
+    result.add_argument("--version", action="store_true", help="Print release version and iteration")
     commands = result.add_subparsers(dest="command", required=True)
+    version = commands.add_parser("version", help="Print the authoritative release metadata as JSON")
+    version.set_defaults(handler=lambda args: {"status": "PASS", "release": read_release(ROOT)})
     init = commands.add_parser("init", help="Create a local project with empty state; no remote calls or invented resource IDs")
     init.add_argument("--project", required=True, type=Path, help="New or empty project directory")
     init.add_argument("--feishu-config", type=Path, help="Explicit user-owned JSON profile; IDs and schema are copied, not verified")
@@ -257,6 +266,10 @@ def parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     try:
+        if arguments == ["--version"]:
+            release = read_release(ROOT)
+            print(f"v{release['version']} (iteration {release['iteration']:03d}, {release['released_on']})")
+            return 0
         # Local help remains available while the independent provider is absent.
         if arguments and arguments[0] == "acquire":
             if "--help" in arguments[1:] or "-h" in arguments[1:]:

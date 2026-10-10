@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from phrase_annotation import (DEFINITIONS, PROFILE, is_v9, reading_runs as reviewed_reading_runs,
                                validate_annotations, validate_runs)
 from emotion_progression import LEGACY_STAGES, match_authoring, progression_label, event_label
+from source_evidence import validate_source_evidence
 
 
 FAMILIES = {
@@ -151,6 +152,10 @@ def validate_inputs(analysis, manifest, content, materials_url, segments_url):
                 require(detail[field] == seg[source], f'Deep analysis {field} differs from manifest: {seg["id"]}')
             readable(detail.get('conditions'), 'Deep analysis reuse conditions')
         match_authoring(seg, detail)
+        validate_source_evidence(seg, manifest, {
+            span['shot_id']: {'start_ms': span['segment_intersection_start_ms'],
+                              'end_ms': span['segment_intersection_end_ms']}
+            for span in seg.get('source_shot_spans', [])})
         selected = [u for u in units if u['section_id'] == seg['id']]
         expected = seg['source_excerpt']['items']
         require(len(selected) == len(expected), f"Subtitle item count mismatch: {seg['id']}")

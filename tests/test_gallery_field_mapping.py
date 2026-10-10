@@ -15,7 +15,7 @@ from sync_video_base import decode_records
 
 
 class GalleryMappingTests(unittest.TestCase):
-    def run_case(self, archived=False, wrong_cover=False):
+    def run_case(self, archived=False, wrong_cover=False, wrong_segment=False):
         material_names = ['素材ID', '产品编码', '所属产品', '来源平台', '素材附件', '原视频关联', '所属脚本段', '选材分区']
         video_names = ['画面素材', '脚本段', '所属产品']
         mappings = {table: {name: {'id': 'fld' + table + str(i), 'name': 'Custom ' + table + ' ' + str(i), 'type': 'text'}
@@ -25,7 +25,7 @@ class GalleryMappingTests(unittest.TestCase):
             name: {'id': 'tbl' + name, 'fields': fields} for name, fields in mappings.items()}}
         row = {'record_id': 'recmaterial', 'fields': {'素材ID': 'clip-001:shot1', '产品编码': 'P001',
                '所属产品': 'Example product', '来源平台': 'Example', '素材附件': [{'name': 'clip.mp4'}],
-               '原视频关联': [{'id': 'recsource'}], '所属脚本段': [{'id': 'recsegment'}],
+               '原视频关联': [{'id': 'recsource'}], '所属脚本段': [{'id': 'recunrelated' if wrong_segment else 'recsegment'}],
                '选材分区': 'archive' if archived else 'active'}}
         row['fields'] = {mappings['materials'][name]['name']: value for name, value in row['fields'].items()}
         parent = {mappings['videos'][name]['name']: value for name, value in {
@@ -33,7 +33,7 @@ class GalleryMappingTests(unittest.TestCase):
         plan = {'base_id': 'baseFixture', 'video_id': 'clip-001', 'source_record_id': 'recsource',
                 'product_record_id': 'recproduct', 'source_sha256': 'a' * 64,
                 'materials': [{'key': 'clip-001:shot1', 'attachments': [{'field': '素材附件', 'path': 'clip.mp4'}]}],
-                'segments': [{'key': 'clip-001:seg1'}]}
+                'segments': [{'key': 'clip-001:seg1', 'source_shot_keys': ['clip-001:shot1']}]}
         state = {'pending': None, 'main_fields_verified': True,
                  'records': {'materials': {'clip-001:shot1': {'record_id': 'recmaterial'}},
                              'segments': {'clip-001:seg1': {'record_id': 'recsegment'}}}}
@@ -94,6 +94,14 @@ class GalleryMappingTests(unittest.TestCase):
     def test_custom_schema_does_not_weaken_video_cover_guard(self):
         with self.assertRaisesRegex(AssertionError, 'preview video'):
             self.run_case(wrong_cover=True)
+
+    def test_custom_fields_reject_wrong_segment_link(self):
+        with self.assertRaisesRegex(AssertionError, 'semantic segment'):
+            self.run_case(wrong_segment=True)
+
+    def test_archived_material_rejects_wrong_segment_link(self):
+        with self.assertRaisesRegex(AssertionError, 'semantic segment'):
+            self.run_case(archived=True, wrong_segment=True)
 
 
 if __name__ == '__main__':

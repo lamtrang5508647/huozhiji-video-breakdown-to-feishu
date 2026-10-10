@@ -40,6 +40,8 @@ def write_json(path: Path, value: dict) -> None:
 
 def input_url(text: str) -> str:
     # Accept pasted share copy without guessing which of multiple links the user meant.
+    if not isinstance(text, str):
+        raise AcquisitionError("invalid_input", "Source URL must be text")
     urls = re.findall(r"https?://[^\s<>\"\u3000]+", text)
     urls = [url.rstrip("。，、；：！？）】》)]}>.,;!?") for url in urls]
     if len(urls) != 1:
@@ -127,7 +129,7 @@ def _stop_owned_browser(process: subprocess.Popen) -> bool:
 
 
 def run_owned_browser(command: list[str], timeout: int) -> subprocess.CompletedProcess:
-    """Give the Channels browser a hard deadline and own its cleanup boundary."""
+    """Give a browser provider a hard deadline and own its cleanup boundary."""
     creation = ({"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)}
                 if os.name == "nt" else {"start_new_session": True})
     try:
@@ -136,13 +138,13 @@ def run_owned_browser(command: list[str], timeout: int) -> subprocess.CompletedP
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                    text=True, encoding="utf-8", errors="replace", shell=False, **creation)
     except FileNotFoundError:
-        raise AcquisitionError("dependency_missing", "The Channels browser executable is unavailable") from None
+        raise AcquisitionError("dependency_missing", "The browser provider executable is unavailable") from None
     try:
         stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         if not _stop_owned_browser(process):
             raise AcquisitionError("browser_cleanup_failed", "Browser timed out and its owned process tree could not be fully terminated") from None
-        raise AcquisitionError("timeout", "Channels browser acquisition exceeded its time limit; its owned process tree was terminated") from None
+        raise AcquisitionError("timeout", "Browser acquisition exceeded its time limit; its owned process tree was terminated") from None
     except BaseException:
         _stop_owned_browser(process)
         raise
@@ -241,7 +243,14 @@ def validate_wechat_options(args, platform: str) -> None:
             raise AcquisitionError("invalid_options", "Channels browser timeout must be a positive whole-second timer budget")
 
 
+def provider_object(value: object) -> dict:
+    if not isinstance(value, dict):
+        raise AcquisitionError("provider_contract", "Provider must return one video JSON object")
+    return value
+
+
 def validate_provider(data: dict, url: str, platform: str, output: Path, download: bool) -> dict:
+    data = provider_object(data)
     if data.get("status") not in ("metadata_ready", "downloaded"):
         raise AcquisitionError(data.get("error_code") or data.get("reason") or "provider_failed",
                                "Provider could not establish usable source metadata; see the local provider result")
@@ -281,7 +290,10 @@ def validate_provider(data: dict, url: str, platform: str, output: Path, downloa
     if download:
         if data.get("status") != "downloaded":
             raise AcquisitionError("media_missing", "Download requested, but provider produced metadata only")
-        media = Path(data.get("media_path", "")).resolve()
+        media_path = data.get("media_path")
+        if not isinstance(media_path, str) or not media_path.strip():
+            raise AcquisitionError("media_missing", "Provider did not return a local media file path")
+        media = Path(media_path).resolve()
         if not media.is_relative_to(output.resolve()) or media == output.resolve():
             raise AcquisitionError("media_path_escape", "Provider media must be a file inside this acquisition directory")
         data["media_path"] = str(media)
@@ -303,7 +315,7 @@ def ytdlp_provider(args, url: str, output: Path) -> dict:
         # Do not echo provider stderr, which can contain cookies, signed URLs or session values.
         raise AcquisitionError("extraction_failed", "yt-dlp could not extract this link; login/restrictions or unsupported site may be the cause")
     try:
-        info = json.loads(result.stdout)
+        info = provider_object(json.loads(result.stdout))
     except json.JSONDecodeError as exc:
         raise AcquisitionError("provider_contract", "yt-dlp did not return one video JSON record") from exc
     if info.get("_type") in ("playlist", "multi_video") or info.get("entries"):
@@ -373,11 +385,12 @@ def provider(args, url: str, platform: str, output: Path) -> dict:
         if args.headed:
             command.append("--headed")
     command += ["--url", url, "--output", str(output), "--download" if args.download else "--metadata-only"]
-    result = (run_owned_browser if wechat_browser else run)(command, args.timeout)
+    uses_browser = wechat_browser or platform != "wechat_channels"
+    result = (run_owned_browser if uses_browser else run)(command, args.timeout)
     file = output / "provider-result.json"
     if not file.is_file():
         raise AcquisitionError("provider_contract", "Provider did not create its metadata result; check runtime dependencies")
-    data = json.loads(file.read_text(encoding="utf-8-sig"))
+    data = provider_object(json.loads(file.read_text(encoding="utf-8-sig")))
     if result.returncode and data.get("status") in ("metadata_ready", "downloaded"):
         raise AcquisitionError("provider_failed", "Provider exit code and success status disagree")
     if wechat_browser and data.get("status") in ("metadata_ready", "downloaded"):

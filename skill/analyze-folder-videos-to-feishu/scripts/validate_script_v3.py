@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from emotion_progression import manifest_emotion
+from source_evidence import validate_source_evidence
 
 class InvalidManifest(ValueError):
     pass
@@ -171,6 +172,7 @@ def validate(data: dict, manifest_path: Path, timeline_override: Path | None, ff
         try:
             manifest_emotion(segment, {sid: (shot["start_ms"], shot["end_ms"])
                                        for sid, shot in shot_by_id.items()})
+            validate_source_evidence(segment, data, shot_by_id)
         except ValueError as exc:
             raise InvalidManifest(f"{label}: {exc}") from exc
         for context in segment.get("boundary_context", []):

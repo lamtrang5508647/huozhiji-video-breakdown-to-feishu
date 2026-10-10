@@ -19,9 +19,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from validate_script_v3 import InvalidManifest, read_json, validate
+from emotion_progression import manifest_emotion, progression_label, event_label
 
 
-ENGINE = "script-v3-export/1.1"
+ENGINE = "script-v3-export/1.2"
 
 
 def sha256(path: Path) -> str:
@@ -133,7 +134,13 @@ def render_html(data: dict) -> str:
     for segment in data["segments"]:
         name = html.escape(segment["name"])
         role = html.escape(segment["role"])
-        hypothesis = html.escape(segment["emotion"]["audience_hypothesis"])
+        emotion = manifest_emotion(segment)
+        hypothesis = html.escape(segment["emotion"].get("audience_hypothesis") or "未提供受众反应假设")
+        emotion_status = progression_label(segment["emotion"]) or "旧四阶段观察记录（不代表独立内容复核通过）"
+        emotion_events = " → ".join(
+            f"{event_label(event, index)} {timecode(event['evidence_time_ms'])}：{event['observable']}"
+            + "（" + "、".join(event['evidence_shot_ids']) + "）"
+            for index, event in enumerate(emotion["events"])) or "未明确，暂无可核对事件"
         sid = html.escape(segment["id"])
         start, end = segment["start_ms"], segment["end_ms"]
         tags = "　".join(html.escape(t) for t in segment["emotion_tags"])
@@ -171,7 +178,8 @@ def render_html(data: dict) -> str:
   <video controls preload="metadata" playsinline src="clips/{sid}.mp4"></video>
   <p><b>段落作用：</b>{role}</p>
   <p><b>情绪表达标签：</b>{tags or '未明确'}</p>
-  <p><b>受众反应：</b>{hypothesis}</p>
+  <p><b>原片情绪观察：</b>{html.escape(emotion_status)}；{html.escape(emotion_events)}</p>
+  <p><b>受众反应假设（非测量）：</b>{hypothesis}</p>
   <p><b>源组/镜头：</b>{groups}；{sources}</p>
   <details><summary>查看源结构、复刻脚本槽位、镜头与模型建议</summary>
     <p><b>源片结构：</b>{html.escape(segment['source_structure'])}</p>
@@ -200,10 +208,12 @@ img{{width:240px;max-width:100%;display:block;margin:8px 0;border-radius:6px}} p
 
 def render_csv(path: Path, data: dict) -> None:
     fields = ["video_id", "revision", "ordinal", "segment_id", "name", "start_ms", "end_ms", "start_time", "end_time", "duration_sec", "script_function", "emotion_tags", "role", "source_group_ids", "source_shot_ids", "source_shot_spans_json", "source_excerpt_json", "clip_path", "thumbnail_path", "audio_review_status"]
+    fields += ["emotion_progression_status", "emotion_review_note", "emotion_events_json"]
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         for segment in data["segments"]:
+            emotion = manifest_emotion(segment)
             writer.writerow({
                 "video_id": data["video_id"], "revision": data["revision"],
                 "ordinal": segment["ordinal"], "segment_id": segment["id"], "name": segment["name"],
@@ -217,6 +227,9 @@ def render_csv(path: Path, data: dict) -> None:
                 "source_excerpt_json": json.dumps(segment["source_excerpt"], ensure_ascii=False),
                 "clip_path": f"clips/{segment['id']}.mp4", "thumbnail_path": f"thumbnails/{segment['id']}.jpg",
                 "audio_review_status": segment["review_status"]["audio"],
+                "emotion_progression_status": emotion["status"],
+                "emotion_review_note": emotion["review_note"],
+                "emotion_events_json": json.dumps(emotion["events"], ensure_ascii=False),
             })
 
 

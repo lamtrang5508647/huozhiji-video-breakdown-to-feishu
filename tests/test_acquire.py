@@ -131,6 +131,42 @@ class SourceContracts(unittest.TestCase):
             acquire.acquire(args)
         provider.assert_not_called()
 
+    def test_non_object_provider_json_is_saved_as_blocked_without_traceback(self):
+        for route, url in (("browser", self.url), ("ytdlp", "https://other.invalid/video/1")):
+            for index, payload in enumerate((None, [], False, "synthetic-private-value")):
+                output = self.root / f"{route}-{index}"
+                def provider_result(*unused):
+                    if route == "browser":
+                        acquire.write_json(output / "provider-result.json", payload)
+                    return subprocess.CompletedProcess([], 0, json.dumps(payload), "")
+                with self.subTest(route=route, payload=payload), \
+                     patch.object(acquire, "run", side_effect=provider_result), \
+                     patch.object(acquire, "run_owned_browser", side_effect=provider_result), \
+                     patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                    code = acquire.main(["--url", url, "--output", str(output)])
+                    self.assertEqual(code, 1)
+                    receipt = json.loads((output / "acquisition.json").read_text(encoding="utf-8"))
+                    self.assertEqual(receipt["status"], "blocked")
+                    self.assertEqual(receipt["error_code"], "provider_contract")
+                    self.assertFalse(receipt["media_verified"])
+                    self.assertFalse((output / "source.json").exists())
+                    self.assertNotIn("synthetic-private-value", stderr.getvalue())
+
+    def test_invalid_provider_url_and_media_path_keep_failure_receipts(self):
+        cases = ({"canonical_url": None}, {"canonical_url": []},
+                 {"status": "downloaded", "media_path": None},
+                 {"status": "downloaded", "media_path": []})
+        for index, changes in enumerate(cases):
+            output = self.root / f"invalid-field-{index}"
+            with self.subTest(changes=changes), \
+                 patch.object(acquire, "provider", return_value={**self.data, **changes}), \
+                 patch("sys.stderr", new_callable=io.StringIO):
+                code = acquire.main(["--url", self.url, "--output", str(output), "--download"])
+                self.assertEqual(code, 1)
+                receipt = json.loads((output / "acquisition.json").read_text(encoding="utf-8"))
+                self.assertEqual(receipt["status"], "blocked")
+                self.assertFalse((output / "source.json").exists())
+
     def test_generic_provider_rejects_fallback_and_playlists(self):
         args = acquire.parser().parse_args(["--url", "https://other.invalid/video/1", "--output", str(self.root)])
         for data in ({"id": "invented", "title": "filename", "extractor_key": "Generic"},
@@ -359,7 +395,7 @@ class OwnedBrowserProcessTests(unittest.TestCase):
                 provider.assert_not_called()
 
     @unittest.skipUnless(os.name == "nt", "Windows taskkill integration")
-    def test_real_windows_timeout_removes_own_child_and_preserves_unrelated_process(self):
+    def test_real_windows_browser_provider_timeout_removes_own_child_and_preserves_unrelated_process(self):
         kernel = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
         kernel.OpenProcess.restype = ctypes.c_void_p
@@ -381,11 +417,24 @@ class OwnedBrowserProcessTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory:
                 pidfile = Path(directory) / "child.pid"
                 code = ("import subprocess,sys,time,pathlib; "
-                        "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); "
+                        "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)'], "
+                        "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
                         "pathlib.Path(sys.argv[1]).write_text(str(child.pid)); time.sleep(30)")
-                with self.assertRaises(acquire.AcquisitionError) as raised:
-                    acquire.run_owned_browser([sys.executable, "-c", code, str(pidfile)], 1)
+                real_popen = subprocess.Popen
+                def local_browser(command, *args, **kwargs):
+                    if command[0] == "node":
+                        command = [sys.executable, "-c", code, str(pidfile)]
+                    return real_popen(command, *args, **kwargs)
+                output = Path(directory) / "acquisition"
+                args = acquire.parser().parse_args(["--url", "https://www.douyin.com/video/1234567890123456789",
+                                                    "--output", str(output), "--timeout", "1"])
+                with patch.object(acquire.subprocess, "Popen", side_effect=local_browser):
+                    with self.assertRaises(acquire.AcquisitionError) as raised:
+                        acquire.acquire(args)
                 self.assertEqual(raised.exception.code, "timeout")
+                receipt = json.loads((output / "acquisition.json").read_text(encoding="utf-8"))
+                self.assertEqual(receipt["status"], "blocked")
+                self.assertFalse((output / "source.json").exists())
                 child_pid = int(pidfile.read_text())
                 self.assertFalse(alive(child_pid), "Owned grandchild survived the timeout")
                 self.assertIsNone(sentinel.poll(), "Unrelated process was terminated")

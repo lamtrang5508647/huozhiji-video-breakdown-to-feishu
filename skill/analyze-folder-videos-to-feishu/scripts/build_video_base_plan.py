@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 from source_identity import canonical_schema, source_identity
 from emotion_progression import progression_label, event_label
+from source_evidence import SourceEvidenceError, format_source_evidence as _format_source_evidence
 
 
 class PlanError(RuntimeError):
@@ -79,77 +80,11 @@ def json_text(value: Any) -> str:
 
 def format_source_evidence(segment: dict[str, Any], manifest: dict[str, Any],
                            timeline_by_id: dict[str, dict[str, Any]]) -> str:
-    """Check material references, not their visual truth or support for a claim.
-
-    Optional source_evidence records bind description to this source and a half-open
-    interval covered by this segment's shot intersections. Neither supported status
-    represents independent verification. Legacy source_claims remain attributed data.
-    """
-    evidence = segment.get("source_evidence", [])
-    if not isinstance(evidence, list):
-        raise PlanError("segment.source_evidence must be an array")
-    claims = segment.get("source_claims", [])
-    lines = ["原作者主张及源片展示材料记录，均未独立核实。",
-             "原作者主张（未独立核实）：" + (json_text(claims) if claims else "未提供原作者主张记录"),
-             "源片展示材料（输入记录，内容待独立复核）："]
-    required = {"source_video_id", "source_sha256", "source_shot_ids", "start_ms", "end_ms", "description"}
-    allowed = required | {"support_scope", "verification_status"}
-    for index, item in enumerate(evidence, 1):
-        label = f"segment.source_evidence[{index - 1}]"
-        if not isinstance(item, dict) or not required <= set(item) or set(item) - allowed:
-            raise PlanError(f"{label} has missing or unsupported fields")
-        digest = item["source_sha256"]
-        if (item["source_video_id"] != manifest["video_id"] or not isinstance(digest, str)
-                or not re.fullmatch(r"[a-fA-F0-9]{64}", digest)
-                or digest.lower() != manifest["source"]["sha256"].lower()):
-            raise PlanError(f"{label} belongs to a different source video or SHA-256")
-        status = item.get("verification_status", "unverified")
-        if not isinstance(status, str) or status not in {"unverified", "source_material_only"}:
-            raise PlanError(f"{label}.verification_status cannot assert independent verification")
-        description = text(item["description"], label + ".description")
-        support = text(item["support_scope"], label + ".support_scope") if "support_scope" in item else None
-        shot_ids = item["source_shot_ids"]
-        if (not isinstance(shot_ids, list) or not shot_ids
-                or not all(isinstance(sid, str) and sid for sid in shot_ids)
-                or len(set(shot_ids)) != len(shot_ids)):
-            raise PlanError(f"{label}.source_shot_ids must be unique nonempty shot IDs")
-        start, end = item["start_ms"], item["end_ms"]
-        if (type(start) is not int or type(end) is not int
-                or not segment["start_ms"] <= start < end <= segment["end_ms"]):
-            raise PlanError(f"{label} interval must be inside the script segment")
-        spans = {span["shot_id"]: span for span in segment["source_shot_spans"]}
-        intervals = []
-        for sid in shot_ids:
-            if sid not in spans or sid not in timeline_by_id:
-                raise PlanError(f"{label} references a shot outside this source segment")
-            span, shot = spans[sid], timeline_by_id[sid]
-            left = max(start, segment["start_ms"], shot["start_ms"], span["segment_intersection_start_ms"])
-            right = min(end, segment["end_ms"], shot["end_ms"], span["segment_intersection_end_ms"])
-            if left >= right:
-                raise PlanError(f"{label} references a shot outside the material interval")
-            intervals.append((left, right, sid))
-        cursor = start
-        ordered_ids = []
-        for left, right, sid in sorted(intervals):
-            if left != cursor:
-                raise PlanError(f"{label} shot references do not continuously cover the material interval")
-            cursor = right
-            ordered_ids.append(sid)
-        if cursor != end:
-            raise PlanError(f"{label} shot references do not cover the full material interval")
-        # Quote authored strings: embedded newlines cannot become unqualified status labels.
-        lines.append(f"{index}. 展示观察记录：{json_text(description)}")
-        lines.append(f"来源：{manifest['video_id']}｜SHA-256：{digest.lower()}｜"
-                     f"镜头：{'、'.join(ordered_ids)}｜{start}–{end} ms")
-        if support is not None:
-            lines.append("提交的支持范围说明（待独立复核）：" + json_text(support))
-    if not evidence:
-        lines.append("未提供展示材料记录；不能由原作者主张推定支持材料存在，也不据此断言原片没有材料。")
-    lines.extend([
-        "支持范围：仅记录所引用的源片材料；材料出现不等于商品功效、因果关系或原作者结论已获验证。",
-        "核实状态：未独立核实。程序仅检查来源引用与结构；材料内容、真实性及主张支持程度仍需独立复核。",
-    ])
-    return "\n".join(lines)
+    """Compatibility wrapper using the shared export/presentation evidence gate."""
+    try:
+        return _format_source_evidence(segment, manifest, timeline_by_id)
+    except SourceEvidenceError as exc:
+        raise PlanError(str(exc)) from exc
 
 
 def format_excerpt(manifest_segment: dict[str, Any], timeline_by_id: dict[str, dict[str, Any]]) -> str:

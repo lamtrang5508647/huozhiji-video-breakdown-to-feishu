@@ -31,3 +31,24 @@ separate workspace created with `scripts/project.py init`.
 - Only a `ready` acquisition with real video stream, complete decode and source SHA-256 may become the breakdown source. It remains unreviewed content.
 - Never auto-export cookies, solve captcha, install system proxies/certificates or enable a third-party Channels parser silently.
 - Channels request echoes cannot establish object identity. Missing native source anchors, unavailable providers and encrypted-only media remain blocked.
+
+# Release versions
+
+- Read `docs/versioning.md` before preparing a formal version. Root `VERSION.json`
+  is the sole version source; both Skill `VERSION.json` copies must match it.
+- Start formal versioning at `v1.0.0`, iteration `1`, dated `2026-10-10`.
+  Earlier history was unversioned; never invent retrospective release numbers.
+- Use `python scripts/versioning.py bump --part patch|minor|major --date YYYY-MM-DD --notes-file PATH`
+  to prepare local metadata and a concrete changelog entry. Each formal iteration
+  increases `iteration` by one. This command does not authorize or perform a Git
+  commit, push, tag, or GitHub Release.
+- Keep `CHANGELOG.md` entries in the documented exact title format. Record actual
+  changes, compatibility and verification boundaries; do not invent test totals.
+- Run `python scripts/versioning.py check` and check the intended `v<version>` tag
+  with `--tag` before release. Run the required regression/media checks and verify
+  both installed Skill versions and file contents. Reuse current-task authorization
+  for any remote release step; verify the remote commit and version before claiming
+  publication. Local version preparation alone is not a published release.
+- Component engine versions and output hashes remain separate from the repository
+  release version. Preserve existing provenance, public/owner-only permissions,
+  and the boundary between local tests and real source/Feishu/AI verification.
