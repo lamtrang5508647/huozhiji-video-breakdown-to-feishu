@@ -23,6 +23,7 @@ separate workspace created with `scripts/project.py init`.
   video/frame exports. Report skipped or untested remote paths honestly.
 - Do not add a blanket open-source license until the provenance recorded in
   `PROVENANCE.md` is resolved.
+- Keep this repository public with source-repository write, merge and administration access limited to owner `lamtrang5508647` and automation explicitly authorized by that owner. Public download and invocation do not grant repository write access. Do not add collaborators, writable third-party deploy keys or automatic merging of external changes without the owner's explicit instruction. Follow `docs/repository-access.md`; do not treat this rule as a restriction on editing someone's own fork or local copy.
 # Link acquisition
 
 - Use `video-link-extractor` before breakdown when starting from a share link.
