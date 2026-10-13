@@ -1,7 +1,7 @@
 # huozhiji · Video Breakdown to Feishu
 
 <!-- release-version:start -->
-当前版本 **v1.0.0** · 第 **001** 次正式版本迭代（2026-10-10）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
+当前版本 **v1.1.0** · 第 **002** 次正式版本迭代（2026-10-13）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
 <!-- release-version:end -->
 
 把带货视频拆成 **完整脚本框架 + 连续语义段 + 逐画面素材**，保留原文、时间线、
@@ -20,6 +20,7 @@
 - **千川深拆**：购买问题、卖点与展示材料、声画关系、行动承接及可复用条件；
   情绪按实际变化记录，原作者主张与证据分开。规则和官方学习来源见 [千川深拆](skill/analyze-folder-videos-to-feishu/references/qianchuan-deep-breakdown.md)，只分析与整理。
 - **两种视频片段**：按脚本意思形成连续段，同时保留逐画面编号、切片与关键帧。
+- **脚本与镜头对齐**：按“脚本段 × 相交画面”并排查看原字幕、源时间、仿写槽和对应镜头组建议，点击定位视频；对齐表可导出 CSV/JSON，便于仿写和剪辑处理。时间粒度及用法见 [对齐说明](skill/analyze-folder-videos-to-feishu/references/script-shot-alignment.md)。
 - **素材资产库**：关联源视频和脚本段，标注产品、平台、场景、用途；
   剪辑复用与 AI 重制分别判断。
 - **持续归档**：每个产品 × 平台复用一个分析文档，每条视频为一个章节，
@@ -44,6 +45,7 @@ python scripts/project.py demo --output outputs/demo
 ```
 
 打开 `outputs/demo/analysis.html` 查看脚本页面，`outputs/demo/semantic/index.html` 查看连续段视频。
+两页均可查看脚本与镜头对齐；`outputs/demo/semantic/script-shot-alignment.csv` 可用表格软件打开，JSON 保留完整来源与时间偏移。
 示例会生成 4 秒 RED/BLUE 色卡原片、2 个画面片段、2 个脚本段片段、缩略图、
 CSV/JSON、`chapter.xml` 和 `verification.json`。字幕直接绘制在合成画面上，音轨为测试音。
 它验证程序连接、排版、导出与重复运行校验，**不代表真实带货脚本的语义审查**。

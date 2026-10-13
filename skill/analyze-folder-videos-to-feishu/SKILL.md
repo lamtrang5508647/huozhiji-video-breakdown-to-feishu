@@ -23,6 +23,8 @@ Process videos one at a time from the user's explicit source and target. Keep an
 
 先按 [script-segment-framework.md 的文字交付流程](references/script-segment-framework.md#文本拆解转写标色与框架输出) 完成原声转写/来源校对，再分析框架与短语功能。已有可信转写时复用并核对其源片身份；需要机器草稿时使用 [offline_asr.py](scripts/offline_asr.py)。ASR 的 `transcript.json` 与 `transcript.txt` 成对保留，不能只交 TXT 后宣称已经校对。缺少音轨、ASR 运行时或实际听校能力时，明确受阻项，先交可核实的字幕摘录与画面分析；不得把摘录改称完整原声转写。
 
+**新增脚本与镜头对齐交付。** 新做的完整拆解按 [script-shot-alignment.md](references/script-shot-alignment.md) 将每个脚本段与其相交画面逐行对照，给出源时间、段内/镜头内偏移、原字幕、段级仿写槽位及对应组级拍法/剪辑建议。原文、仿写和源观察分别展示；跨段镜头保留各段真实交集，空字幕不补文。`export_script_v3.py` 默认导出对齐 HTML/JSON/CSV；彩色脚本 HTML 用 `render_script_analysis.py --manifest <script-manifest.json>` 接入同一对齐表。新 authoring 的 `sections-content.json` 写 `script_shot_alignment: true` 启用 Docx 对照；旧章节无该标记时保留已有格式，不自动远端改写。此粒度是段与镜头交集，不代表逐句口播已校准。
+
 若项目有 `config/presentation-baseline.json`，读取其中第一条样板的确切视频身份与章节锚点；不要靠列表顺序猜样板。仅复用格式，具体脚本和品牌仍来自当前原片。
 
 先读项目配置和最新状态 → 完整看源片证据 → 转写并核对原声/字幕来源与校对状态 → 分析整片框架和完整语义段 → 上下文短语标色与内容复核 → 审逐画面时间线 → 固定程序排版 → 按授权导出两类视频并上传 → 飞书实际回读。业务产品、原片品牌、视频来源分别记录。

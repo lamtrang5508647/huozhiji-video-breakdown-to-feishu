@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from emotion_progression import manifest_emotion
 from source_evidence import validate_source_evidence
+from script_shot_alignment import segment_alignment, build_alignment
 
 class InvalidManifest(ValueError):
     pass
@@ -142,6 +143,16 @@ def validate(data: dict, manifest_path: Path, timeline_override: Path | None, ff
             fail_if(group not in {g.get("id") for g in timeline.get("semantic_groups", [])}, f"{label} references unknown semantic group {group}")
         for shot_group in segment.get("shot_groups", []):
             fail_if(shot_group.get("source_group_id") not in primary_groups, f"{label} shot_group is not a primary semantic group")
+            members = shot_group.get("source_shot_ids", [])
+            fail_if(not isinstance(members, list) or not all(isinstance(sid, str) for sid in members),
+                    f"{label} shot_group members must be shot IDs")
+            if members:
+                group = next(g for g in timeline['semantic_groups'] if g.get('id') == shot_group['source_group_id'])
+                approved_members = group.get('source_shot_ids')
+                fail_if(not isinstance(approved_members, list),
+                        f"{label} reviewed timeline lacks shot_group membership; verify before associating guidance")
+                fail_if(not set(members) <= set(approved_members) or not set(members) <= set(segment.get('source_shot_ids', [])),
+                        f"{label} shot_group members differ from reviewed timeline group or segment")
         for tag in segment.get("emotion_tags", []):
             fail_if(tag not in expected_emotions, f"{label} has an emotion tag absent from manifest options: {tag}")
         fail_if(segment.get("script_function") not in expected_functions, f"{label} has an unknown script function")
@@ -173,6 +184,7 @@ def validate(data: dict, manifest_path: Path, timeline_override: Path | None, ff
             manifest_emotion(segment, {sid: (shot["start_ms"], shot["end_ms"])
                                        for sid, shot in shot_by_id.items()})
             validate_source_evidence(segment, data, shot_by_id)
+            segment_alignment(segment)
         except ValueError as exc:
             raise InvalidManifest(f"{label}: {exc}") from exc
         for context in segment.get("boundary_context", []):
@@ -180,6 +192,10 @@ def validate(data: dict, manifest_path: Path, timeline_override: Path | None, ff
             fail_if(not context.get("source_shot_spans"), f"{label} boundary context needs intersecting source spans")
 
     fail_if(cursor != duration_ms, "full coverage end does not match duration")
+    try:
+        build_alignment(data)
+    except ValueError as exc:
+        raise InvalidManifest(f"script-shot alignment: {exc}") from exc
     missing_shots = set(shot_by_id) - source_refs
     fail_if(bool(missing_shots), f"full clip coverage failed to reference source shots: {sorted(missing_shots)[:5]}")
     transcript_status = data.get("transcript_status", "")

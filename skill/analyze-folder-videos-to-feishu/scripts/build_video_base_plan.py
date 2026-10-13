@@ -236,6 +236,10 @@ def validate_export_bundle(manifest_path: Path, manifest: dict, export_path: Pat
         raise PlanError('Export receipt is incomplete or belongs to different reviewed inputs')
     reports = receipt.get('report_sha256')
     required = {'index.html', 'README.md', 'segments.csv', 'export_manifest.json'}
+    if ('script-v3-export/1.3' in (receipt.get('engine'), export.get('export', {}).get('engine'))):
+        if receipt.get('engine') != export.get('export', {}).get('engine'):
+            raise PlanError('Export engine differs from receipt')
+        required |= {'script-shot-alignment.json', 'script-shot-alignment.csv'}
     if not isinstance(reports, dict) or set(reports) != required:
         raise PlanError('Export receipt lacks the complete report hash set')
     if export_path != (export_path.parent / 'export_manifest.json').resolve() or index_path != (export_path.parent / 'segments.csv').resolve():

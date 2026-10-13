@@ -20,9 +20,44 @@ from pathlib import Path
 
 from validate_script_v3 import InvalidManifest, read_json, validate
 from emotion_progression import manifest_emotion, progression_label, event_label
+from script_shot_alignment import segment_alignment, render_alignment_table, write_alignment_files
 
 
-ENGINE = "script-v3-export/1.2"
+ENGINE = "script-v3-export/1.3"
+REPORT_FILES = ("index.html", "README.md", "segments.csv", "export_manifest.json",
+                "script-shot-alignment.json", "script-shot-alignment.csv")
+
+# Each button uses offsets inside this semantic clip, not source-video time.
+ALIGNMENT_PLAYER_SCRIPT = r'''
+document.querySelectorAll('button[data-player][data-start][data-end]').forEach(button => {
+  button.addEventListener('click', () => {
+    const player = document.getElementById(button.dataset.player);
+    if (!player) return;
+    const start = Number(button.dataset.start), end = Number(button.dataset.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return;
+    document.querySelectorAll('video').forEach(other => { if (other !== player) other.pause(); });
+    player.dataset.alignmentEnd = String(end);
+    player.dataset.alignmentStart = String(start);
+    const seek = () => {
+      const latestStart = Number(player.dataset.alignmentStart);
+      if (!Number.isFinite(latestStart)) return;
+      player.currentTime = latestStart;
+      const attempt = player.play();
+      if (attempt && attempt.catch) attempt.catch(() => {});
+    };
+    if (player.readyState >= 1) seek();
+    else player.addEventListener('loadedmetadata', seek, {once: true});
+  });
+});
+document.querySelectorAll('video').forEach(player => {
+  player.addEventListener('timeupdate', () => {
+    const end = Number(player.dataset.alignmentEnd);
+    if (player.dataset.alignmentEnd && player.currentTime >= end) {
+      player.pause(); delete player.dataset.alignmentEnd;
+    }
+  });
+});
+'''
 
 
 def sha256(path: Path) -> str:
@@ -146,6 +181,7 @@ def render_html(data: dict) -> str:
         tags = "　".join(html.escape(t) for t in segment["emotion_tags"])
         groups = "、".join(html.escape(x) for x in segment["source_group_ids"])
         sources = "、".join(html.escape(x) for x in segment["source_shot_ids"])
+        alignment = render_alignment_table(segment_alignment(segment), player_id="player-" + segment["id"])
         formula = segment["reusable_formula"]
         shot_plan = "".join(
             "<li><b>" + html.escape(group["source_group_id"]) + "｜源片：</b>" + html.escape(group["source_observation"])
@@ -175,12 +211,15 @@ def render_html(data: dict) -> str:
   <h2>{segment['ordinal']:02d}. {name}</h2>
   <p class="time">{timecode(start)} – {timecode(end)}　({(end-start)/1000:.3f}秒)</p>
   <img loading="lazy" src="thumbnails/{sid}.jpg" alt="{name}缩略图">
-  <video controls preload="metadata" playsinline src="clips/{sid}.mp4"></video>
+  <video id="player-{sid}" controls preload="metadata" playsinline src="clips/{sid}.mp4"></video>
   <p><b>段落作用：</b>{role}</p>
   <p><b>情绪表达标签：</b>{tags or '未明确'}</p>
   <p><b>原片情绪观察：</b>{html.escape(emotion_status)}；{html.escape(emotion_events)}</p>
   <p><b>受众反应假设（非测量）：</b>{hypothesis}</p>
   <p><b>源组/镜头：</b>{groups}；{sources}</p>
+  <h3>脚本与镜头对齐</h3>
+  <p>时间表示本段与画面的交集；字幕摘录不是完整口播，也不代表逐句原音时间已校准。仿写槽位按段、镜头建议按原镜头组提供。</p>
+  {alignment}
   <details><summary>查看源结构、复刻脚本槽位、镜头与模型建议</summary>
     <p><b>源片结构：</b>{html.escape(segment['source_structure'])}</p>
     <p><b>可复用句式结构：</b>{html.escape(formula['structure'])}</p>
@@ -201,9 +240,11 @@ h1{{line-height:1.35}} .notice{{padding:12px 16px;background:#fff4d7;border-left
 .card{{background:white;border-radius:12px;padding:16px;margin:20px 0;box-shadow:0 2px 10px #0001}}
 .time{{font-variant-numeric:tabular-nums;color:#555}} video{{width:100%;max-height:70vh;background:#111;border-radius:8px}}
 img{{width:240px;max-width:100%;display:block;margin:8px 0;border-radius:6px}} p{{line-height:1.65}}
+.script-shot-alignment{{overflow-x:auto}} table{{border-collapse:collapse;width:100%;font-size:14px}} th,td{{padding:10px;border:1px solid #dbe0e8;text-align:left;vertical-align:top;min-width:140px;white-space:pre-wrap}} th{{background:#eef2f9}} button{{padding:7px 10px;cursor:pointer}} td p{{margin:0 0 8px}}
 </style></head><body><h1>{title}｜脚本段导航</h1>
 <p class="notice">口播状态：{html.escape(data['transcript_status'])}。源片主张未独立核实；情绪标签描述原片表达，受众反应是分析假设。</p>
-{whole_analysis}{''.join(cards)}</body></html>"""
+<p><a href="script-shot-alignment.csv" download>下载脚本镜头对齐表（CSV）</a> · <a href="script-shot-alignment.json" download>完整来源与区间（JSON）</a></p>
+{whole_analysis}{''.join(cards)}<script>{ALIGNMENT_PLAYER_SCRIPT}</script></body></html>"""
 
 
 def render_csv(path: Path, data: dict) -> None:
@@ -255,10 +296,10 @@ def validate_existing(output: Path, expected_build_id: str, data: dict, source_h
         if not thumb.is_file() or sha256(thumb) != record["thumbnail_sha256"]:
             raise InvalidManifest(f"existing thumbnail missing or changed: {sid}")
         verify_clip(clip, (segment["end_ms"] - segment["start_ms"]) / 1000, source_has_audio, ffmpeg, ffprobe)
-    required = ["index.html", "README.md", "segments.csv", "export_manifest.json", "export_status.json"]
+    required = [*REPORT_FILES, "export_status.json"]
     if any(not (output / name).is_file() for name in required):
         raise InvalidManifest("existing completed export is missing a required navigation/report file")
-    expected_reports = {"index.html", "README.md", "segments.csv", "export_manifest.json"}
+    expected_reports = set(REPORT_FILES)
     report_hashes = receipt.get("report_sha256")
     if not isinstance(report_hashes, dict) or set(report_hashes) != expected_reports:
         raise InvalidManifest("existing receipt lacks the complete report hash set")
@@ -333,12 +374,15 @@ def render(output: Path, manifest_path: Path, data: dict, build: str, ffmpeg: st
         rendered_data["export"] = {"engine": ENGINE, "build_id": build, "created_at_utc": datetime.now(timezone.utc).isoformat(), "status": "complete"}
         write_json(output / "export_manifest.json", rendered_data)
         render_csv(output / "segments.csv", data)
+        write_alignment_files(output, data)
         (output / "index.html").write_text(render_html(data), encoding="utf-8")
         readme = f"""# {data.get('title', data['video_id'])} 脚本段拆解
 
 本地导出共 {len(data['segments'])} 个连续源片脚本段，覆盖 00:00:00.000–{timecode(round(data['duration_sec']*1000))}。原视频为 {data['source']['duration_sec']:.3f} 秒，原始分辨率保持 {source_info['streams'][0].get('width')}×{source_info['streams'][0].get('height')}，输出不宣称高清。
 
-打开 `index.html` 可以逐段播放视频、看缩略图和导航信息。`export_manifest.json` 保留完整框架、情绪证据、受众假设、镜头组与源镜头交集；`segments.csv` 便于表格查看；`receipt.json` 记录源文件和导出文件校验值。
+打开 `index.html` 可以逐段播放视频、看缩略图，并在脚本与镜头对齐表中定位各画面的交集。`script-shot-alignment.csv` 便于并排查看源文、段级仿写槽和镜头组建议；JSON 保留源片/时间线哈希、精确交集与偏移。它们不代表逐句音频对齐，原文与改写建议分开。
+
+`export_manifest.json` 保留完整框架、情绪证据、受众假设、镜头组与源镜头交集；`segments.csv` 便于表格查看；`receipt.json` 记录源文件和导出文件校验值。
 
 ## 校对边界
 
@@ -350,6 +394,7 @@ def render(output: Path, manifest_path: Path, data: dict, build: str, ffmpeg: st
 - `thumbnails/`：各段中点缩略图。
 - `index.html`：本地播放导航页。
 - `segments.csv`：段落索引及可追溯的源镜头号。
+- `script-shot-alignment.csv` / `.json`：脚本段 × 镜头交集、原字幕与仿写/拍法对照。
 - `export_manifest.json`：完整结构化元数据与逐段验证结果。
 - `receipt.json`：幂等重跑指纹、哈希与媒体验证结果。
 """
@@ -361,7 +406,7 @@ def render(output: Path, manifest_path: Path, data: dict, build: str, ffmpeg: st
             "review_receipt_sha256": sha256(root_review_path),
             "report_sha256": {
                 relative: sha256(output / relative)
-                for relative in ("index.html", "README.md", "segments.csv", "export_manifest.json")
+                for relative in REPORT_FILES
             },
             "created_at_utc": datetime.now(timezone.utc).isoformat(), "segments": output_records,
         }

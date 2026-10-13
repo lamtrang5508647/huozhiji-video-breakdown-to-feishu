@@ -124,23 +124,122 @@ window.__scriptAnalysis={data:D,selectVideo,pickFamily,copy,applyFamilyStyle,phr
 '''
 
 
-def render(d):
+def _bound_alignment(d, manifest):
+    """Bind each derived excerpt to its existing annotation, without reauthoring it."""
+    from script_shot_alignment import build_alignment
+    def require(condition, message):
+        if not condition:
+            raise ValueError('Script-shot alignment: ' + message)
+    require(isinstance(manifest, dict), 'manifest must be an object')
+    require(d.get('text_kind') == 'subtitle_excerpts', 'source subtitle annotations required')
+    require(d.get('video_id') == manifest.get('video_id'), 'video_id differs from manifest')
+    require(d.get('title') == manifest.get('title'), 'title differs from manifest')
+    alignment = build_alignment(manifest)
+    segments = manifest['segments']
+    require([s['id'] for s in d['sections']] == [s['id'] for s in segments],
+            'section IDs/order differ from manifest')
+    section_order = {s['id']: index for index, s in enumerate(segments)}
+    unit_order = [section_order[u['section_id']] for u in d['units']]
+    require(unit_order == sorted(unit_order), 'subtitle sections are out of source order')
+    unit_map = {}
+    for section, segment in zip(d['sections'], segments):
+        for field in ('start_ms', 'end_ms'):
+            require(type(section.get(field)) is int and section[field] == segment[field],
+                    f'{section["id"]} {field} differs from manifest')
+        units = [u for u in d['units'] if u['section_id'] == segment['id']]
+        items = segment.get('source_excerpt', {}).get('items', [])
+        require(len(units) == len(items), f'{segment["id"]} subtitle item count differs')
+        for index, (unit, item) in enumerate(zip(units, items)):
+            require(unit['source_text'] == item['text'], f'{unit["id"]} source text differs')
+            require(unit.get('source_shot_ids') == [item['shot_id']], f'{unit["id"]} source shot differs')
+            unit_map[(segment['id'], index)] = unit['id']
+    for row in alignment['rows']:
+        row['unit_ids'] = [unit_map[(row['segment_id'], item['item_index'])]
+                           for item in row['excerpt_items']]
+    return alignment
+
+
+ALIGNMENT_STYLE = r'''
+.alignment-view{margin-top:20px;padding-top:12px;border-top:1px solid var(--line)}.alignment-view>summary{font-size:14px;font-weight:700;color:var(--ink)}.alignment-scroll{overflow-x:auto}.alignment-table{width:100%;min-width:880px;border-collapse:collapse;font-size:12px;line-height:1.7}.alignment-table th,.alignment-table td{border:1px solid var(--line);padding:10px;vertical-align:top;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}.alignment-table th{background:#f4f7fc}.alignment-table td:first-child{min-width:90px}.alignment-table td:nth-child(2){min-width:180px}.alignment-table td:nth-child(3){min-width:170px}.alignment-table td:nth-child(4),.alignment-table td:nth-child(5){min-width:210px}.alignment-source{margin:0 0 6px;white-space:pre-wrap}.alignment-field{margin:0 0 7px}.alignment-table button{font-size:12px;margin-top:7px;padding:3px 8px}
+'''
+
+ALIGNMENT_SCRIPT = r'''
+function alignmentTime(ms){return time(ms)+'.'+String(ms%1000).padStart(3,'0')}
+function alignmentValue(value){return typeof value==='string'?value:JSON.stringify(value)}
+function alignmentField(node,label,value){if(value===undefined)return;const line=el('p','alignment-field');line.append(el('b',null,label+'：'),document.createTextNode(alignmentValue(value)));node.append(line)}
+function appendAlignment(section,s){
+ const rows=D.script_shot_alignment.rows.filter(row=>row.segment_id===s.id);
+ const units=Object.fromEntries(D.units.map(unit=>[unit.id,unit]));
+ const detail=el('details','alignment-view analysis-only');
+ detail.append(el('summary',null,'脚本与镜头对齐'));
+ detail.append(el('p','small muted','按脚本段与镜头交集定位；不是逐句口播时间，原声对齐未验证。仿写为段级参考，镜头处理为对应组级建议。'));
+ const table=el('table','alignment-table');const head=el('thead');const headings=el('tr');
+ ['画面编号','源片交集 / 段内偏移','原字幕摘录（沿用短语颜色）','段级仿写参考','镜头组观察与处理建议'].forEach(text=>headings.append(el('th',null,text)));
+ head.append(headings);table.append(head);const body=el('tbody');
+ for(const row of rows){
+  const tr=el('tr');tr.dataset.shot=row.shot_id;const shot=el('td',null,row.shot_label);
+  if(row.context_only)shot.append(el('p','small muted','边界上下文'));
+  const timing=el('td');
+  alignmentField(timing,'源片',alignmentTime(row.source_start_ms)+'–'+alignmentTime(row.source_end_ms));
+  alignmentField(timing,'段内',alignmentTime(row.segment_offset_start_ms)+'–'+alignmentTime(row.segment_offset_end_ms));
+  alignmentField(timing,'镜头内',alignmentTime(row.shot_offset_start_ms)+'–'+alignmentTime(row.shot_offset_end_ms));
+  if(s.clip_url){const b=el('button',null,'定位画面');b.type='button';b.onclick=()=>selectVideo(s.id,{locate_ms:row.source_start_ms});timing.append(b)}
+  const subtitle=el('td');
+  if(!row.unit_ids.length)subtitle.append(el('p','small muted','未提供字幕摘录；不代表无口播'));
+  row.unit_ids.forEach((id,index)=>{const unit=units[id];const line=el('p','alignment-source');appendRuns(line,unit.display_runs);subtitle.append(line);
+   if(unit.display_kind==='observation_note')subtitle.append(el('p','small muted','观察注释（不计入原字幕）'));
+   if(row.excerpt_items[index].context_only)subtitle.append(el('p','small muted','本条仅作边界上下文'));
+   if(unit.reading_note)subtitle.append(el('p','small muted','字幕辨读备注：'+unit.reading_note));
+  });
+  const formula=el('td');let formulaFields=0;
+  for(const [key,label] of [['structure','本段公式'],['example_sentence_slots','本段句式'],['slots','变量槽位'],['conditions','复用条件'],['required_evidence','所需证据']]){
+   if(row.reusable_formula[key]!==undefined){alignmentField(formula,label,row.reusable_formula[key]);formulaFields++}
+  }
+  if(!formulaFields)formula.append(el('p','small muted','未提供本段仿写参考'));
+  const guidance=el('td');
+  if(!row.shot_guidance.length)guidance.append(el('p','small muted','未提供对应镜头组指导'));
+  for(const group of row.shot_guidance){
+   alignmentField(guidance,'镜头组',group.source_group_id||'未提供编号');
+   alignmentField(guidance,'适用画面',(group.source_shot_ids||[]).join('、'));
+   alignmentField(guidance,'组级原片观察',group.source_observation);
+   const plan=group.replication_shooting_plan||{};
+   for(const [key,label] of [['subject_action','主体 / 动作建议'],['shot_size_angle','景别 / 机位建议'],['example_sentence_slots','组级句式'],['information_order','信息顺序建议'],['edit_transition','剪辑衔接建议']])alignmentField(guidance,label,plan[key]);
+  }
+  tr.append(shot,timing,subtitle,formula,guidance);body.append(tr);
+ }
+ table.append(body);const scroll=el('div','alignment-scroll');scroll.append(table);detail.append(scroll);section.append(detail);
+}
+'''
+
+
+def render(d, manifest=None):
     validate(d)
     presentation = _default_presentation_copy(d)
     presentation['annotation_validation'] = validate_annotations(d)
     for unit in presentation['units']:
         unit['display_runs'] = reading_runs(unit, strict=is_v9(d))
+    style, script = STYLE, SCRIPT
+    if manifest is not None:
+        presentation['script_shot_alignment'] = _bound_alignment(d, manifest)
+        style += ALIGNMENT_STYLE
+        script = ALIGNMENT_SCRIPT + SCRIPT.replace(
+            "document.getElementById('script-body').append(section)",
+            "appendAlignment(section,s);document.getElementById('script-body').append(section)")
     data = json.dumps(presentation, ensure_ascii=False).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
-    return '''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>脚本分析</title><style>'''+STYLE+'''</style></head><body><main class="app"><header><div><div class="eyebrow">SCRIPT ANALYSIS / 脚本功能拆解</div><h1 id="title"></h1><div id="subtitle" class="muted"></div></div><span class="badge" id="text-kind"></span></header><div class="note source-note" id="source-note"></div><div class="layout"><aside class="side"><div class="panel"><video id="video" class="player" controls preload="metadata"></video><div id="video-empty" class="empty-video" hidden>文案示例 · 未提供对应视频</div><div id="player-title" class="player-title"></div><div id="player-range" class="muted small"></div><p class="small muted">文字旁的定位基于画面与脚本段范围，不代表已校准逐句原音时间。</p></div><div class="panel"><h3>内容段导航</h3><nav id="toc" class="toc"></nav></div><div class="foot links" id="links"></div></aside><div><section class="panel"><div class="row"><h2>本篇脚本公式</h2><button id="copy-formula">复制原片公式</button></div><div id="legend" class="legend"></div><div id="active-filter"></div><div id="source-formula" class="formula"></div><div id="formula-note" class="formula-description"></div></section><section class="panel reuse"><div class="row"><h2>可复用变量公式</h2><button id="copy-reuse">复制复用公式</button></div><div id="reuse-formula" class="formula"></div><div id="reuse-note" class="formula-description"></div></section><section class="panel"><div class="row"><div><h2 id="script-heading"></h2><div class="muted small" id="count"></div></div><div class="tools"><button id="toggle-mode" aria-pressed="false">只看原文</button><button id="copy-script" class="copy-main">复制原文</button></div></div><div id="script-body"></div></section><p class="metrics-note">功能标注和公式属于内容分析；未接入该视频的真实互动时序或转化数据。</p></div></div></main><div class="toast" id="toast" role="status" aria-live="polite"></div><script id="data" type="application/json">'''+data+'''</script><script>'''+SCRIPT+'''</script></body></html>'''
+    return '''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>脚本分析</title><style>'''+style+'''</style></head><body><main class="app"><header><div><div class="eyebrow">SCRIPT ANALYSIS / 脚本功能拆解</div><h1 id="title"></h1><div id="subtitle" class="muted"></div></div><span class="badge" id="text-kind"></span></header><div class="note source-note" id="source-note"></div><div class="layout"><aside class="side"><div class="panel"><video id="video" class="player" controls preload="metadata"></video><div id="video-empty" class="empty-video" hidden>文案示例 · 未提供对应视频</div><div id="player-title" class="player-title"></div><div id="player-range" class="muted small"></div><p class="small muted">文字旁的定位基于画面与脚本段范围，不代表已校准逐句原音时间。</p></div><div class="panel"><h3>内容段导航</h3><nav id="toc" class="toc"></nav></div><div class="foot links" id="links"></div></aside><div><section class="panel"><div class="row"><h2>本篇脚本公式</h2><button id="copy-formula">复制原片公式</button></div><div id="legend" class="legend"></div><div id="active-filter"></div><div id="source-formula" class="formula"></div><div id="formula-note" class="formula-description"></div></section><section class="panel reuse"><div class="row"><h2>可复用变量公式</h2><button id="copy-reuse">复制复用公式</button></div><div id="reuse-formula" class="formula"></div><div id="reuse-note" class="formula-description"></div></section><section class="panel"><div class="row"><div><h2 id="script-heading"></h2><div class="muted small" id="count"></div></div><div class="tools"><button id="toggle-mode" aria-pressed="false">只看原文</button><button id="copy-script" class="copy-main">复制原文</button></div></div><div id="script-body"></div></section><p class="metrics-note">功能标注和公式属于内容分析；未接入该视频的真实互动时序或转化数据。</p></div></div></main><div class="toast" id="toast" role="status" aria-live="polite"></div><script id="data" type="application/json">'''+data+'''</script><script>'''+script+'''</script></body></html>'''
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--input', required=True, type=Path)
     p.add_argument('--output', required=True, type=Path)
+    p.add_argument('--manifest', type=Path, help='Bind optional shot alignment to this source manifest')
     args = p.parse_args()
     d = json.loads(args.input.read_text(encoding='utf-8-sig'))
-    document = render(d)
+    manifest = json.loads(args.manifest.read_text(encoding='utf-8-sig')) if args.manifest else None
+    if args.manifest and not isinstance(manifest, dict):
+        raise ValueError('Script-shot alignment: manifest must be an object')
+    document = render(d, manifest)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(document, encoding='utf-8')
     print(json.dumps({'status': 'rendered', 'units': len(d['units']), 'sections': len(d['sections']),

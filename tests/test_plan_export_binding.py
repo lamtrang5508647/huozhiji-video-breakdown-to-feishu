@@ -128,6 +128,30 @@ class ExportBindingTests(unittest.TestCase):
         with self.assertRaisesRegex(builder.PlanError, 'review receipt'):
             self.run_bundle()
 
+    def test_alignment_export_requires_both_report_hashes_and_rejects_tampering(self):
+        exported = builder.read_json(self.root / 'semantic/export_manifest.json')
+        exported['export']['engine'] = 'script-v3-export/1.3'
+        self.write('semantic/export_manifest.json', exported)
+        receipt = builder.read_json(self.root / 'semantic/receipt.json')
+        receipt['engine'] = 'script-v3-export/1.3'
+        receipt['report_sha256']['export_manifest.json'] = builder.sha256_file(self.root / 'semantic/export_manifest.json')
+        self.write('semantic/receipt.json', receipt)
+        with self.assertRaisesRegex(builder.PlanError, 'report hash set'):
+            self.run_bundle()
+        for name in ('script-shot-alignment.json', 'script-shot-alignment.csv'):
+            path = self.root / 'semantic' / name
+            path.write_text('synthetic alignment receipt binding fixture', encoding='utf-8')
+            receipt['report_sha256'][name] = builder.sha256_file(path)
+        self.write('semantic/receipt.json', receipt)
+        self.assertIn('manifest_sha256', self.run_bundle())
+        for name in ('script-shot-alignment.json', 'script-shot-alignment.csv'):
+            path = self.root / 'semantic' / name
+            original = path.read_bytes()
+            path.write_bytes(original + b' tampered')
+            with self.subTest(name=name), self.assertRaisesRegex(builder.PlanError, 'Export report changed'):
+                self.run_bundle()
+            path.write_bytes(original)
+
 
 if __name__ == '__main__':
     unittest.main()

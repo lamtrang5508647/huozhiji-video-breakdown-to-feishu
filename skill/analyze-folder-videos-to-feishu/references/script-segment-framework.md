@@ -23,6 +23,8 @@ whisper.cpp 路径改用 `--engine whisper-cpp --model <local-model.bin> --whisp
 
 交付和写回时，完整原文只放在项目已有的原脚本字段或本地转写文件，时间定位和状态保存在配套记录；不混入分析标签、公式或改写句。标色分析、两类公式及段落指导写入当前视频的分析章节，素材片段继续链接源视频与语义段。已有字段由项目映射决定，此流程不自动新建重复表格、视图或逐视频文档。
 
+新完整拆解同时交付[脚本与镜头对齐表](script-shot-alignment.md)：每行来自已有段落与镜头的真实时间交集，显示原字幕、段级句式槽和对应组级拍法，保留一段多镜头及一镜头跨段关系。彩色 HTML 渲染时传 `--manifest`；Docx authoring 设置 `script_shot_alignment: true`。不要另造重复原文或把交集时间当逐句音频时间。
+
 ## Evidence And Boundaries
 
 - Capture the source file SHA-256, exact duration, original source-video record (when supplied), and the existing reviewed shot manifest. Never modify the source or the old shot assets.

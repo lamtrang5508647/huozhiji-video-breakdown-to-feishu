@@ -21,6 +21,7 @@ from phrase_annotation import (DEFINITIONS, PROFILE, is_v9, reading_runs as revi
                                validate_annotations, validate_runs)
 from emotion_progression import LEGACY_STAGES, match_authoring, progression_label, event_label
 from source_evidence import validate_source_evidence
+from script_shot_alignment import segment_alignment
 
 
 FAMILIES = {
@@ -107,6 +108,8 @@ def reading_runs(unit, *, strict=False):
 
 def validate_inputs(analysis, manifest, content, materials_url, segments_url):
     annotation_receipt = validate_annotations(analysis, content)
+    require(type(content.get('script_shot_alignment', False)) is bool,
+            'script_shot_alignment must be an explicit boolean')
     mode = content.get('analysis_mode', 'legacy')
     require(mode in ('legacy', 'qianchuan_deep'), "Unknown analysis_mode")
     if mode == 'qianchuan_deep':
@@ -156,6 +159,8 @@ def validate_inputs(analysis, manifest, content, materials_url, segments_url):
             span['shot_id']: {'start_ms': span['segment_intersection_start_ms'],
                               'end_ms': span['segment_intersection_end_ms']}
             for span in seg.get('source_shot_spans', [])})
+        if content.get('script_shot_alignment'):
+            segment_alignment(seg)
         selected = [u for u in units if u['section_id'] == seg['id']]
         expected = seg['source_excerpt']['items']
         require(len(selected) == len(expected), f"Subtitle item count mismatch: {seg['id']}")
@@ -176,6 +181,39 @@ def validate_inputs(analysis, manifest, content, materials_url, segments_url):
         if not is_v9(analysis) and 'formula_runs' in detail:
             validate_runs(detail['formula'], detail['formula_runs'], context='section formula', strict=False)
     return annotation_receipt
+
+
+def alignment_paragraphs(segment, units, detail, profile):
+    """Native paragraph blocks keep existing chapter repair/readback support."""
+    out = [paragraph('脚本与镜头对齐：', '按脚本段与画面交集定位，非逐句原音对齐；仿写按段、镜头建议按组。')]
+    for row in segment_alignment(segment):
+        out.append(paragraph(row['shot_label'] + '｜',
+            f"源片 {tc(row['source_start_ms'])}–{tc(row['source_end_ms'])}；"
+            f"段内 {tc(row['segment_offset_start_ms'])}–{tc(row['segment_offset_end_ms'])}；"
+            f"镜头内 {tc(row['shot_offset_start_ms'])}–{tc(row['shot_offset_end_ms'])}"
+            + ('；仅作边界上下文' if row['context_only'] else '')))
+        excerpts = []
+        for item in row['excerpt_items']:
+            unit = units[item['item_index']]
+            runs = reading_runs(unit, strict=profile == PROFILE)
+            if runs:
+                excerpts.append(color_runs(runs, profile=profile)
+                                + ('（边界上下文）' if item.get('context_only') else ''))
+        out.append('<p><b>原字幕摘录：</b>' + ('　'.join(excerpts) if excerpts else '本画面未提供可读字幕摘录，原声待核对。') + '</p>')
+        out.append(paragraph('仿写槽位（本段参考）：', detail['slots']))
+        groups = row['shot_guidance']
+        if not groups:
+            out.append(paragraph('对应镜头组建议：', '未提供匹配的组级建议；待对照原片补充。'))
+        for group in groups:
+            shots = '、'.join(display_shot(shot) for shot in group['source_shot_ids'])
+            out.append(paragraph('源镜头组观察：', group.get('source_observation', '未提供') + '；适用画面：' + shots))
+            plan = group.get('replication_shooting_plan', {})
+            out.append(paragraph('镜头处理（组级建议）：', '；'.join(
+                label + '：' + str(plan.get(key) or '未提供') for key, label in (
+                    ('subject_action', '主体/动作'), ('shot_size_angle', '景别/机位'),
+                    ('example_sentence_slots', '组级句式槽'), ('information_order', '信息顺序'),
+                    ('edit_transition', '剪辑衔接')))))
+    return out
 
 
 def _render(analysis, manifest, content, materials_url, segments_url):
@@ -243,6 +281,8 @@ def _render(analysis, manifest, content, materials_url, segments_url):
         out.append(paragraph('复刻镜头建议：', detail['shoot']))
         if deep:
             out.append(paragraph('复用边界：', detail['conditions']))
+        if content.get('script_shot_alignment'):
+            out.extend(alignment_paragraphs(seg, units, detail, profile))
     out.append(paragraph('复刻方向：', content['replication_outline']))
     return '\n'.join(out) + '\n'
 

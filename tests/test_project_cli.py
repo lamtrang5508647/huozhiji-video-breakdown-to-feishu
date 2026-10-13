@@ -237,6 +237,8 @@ class ProjectCliTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "PASS")
         self.assertEqual(receipt["shot_clips"], 2)
         self.assertEqual(receipt["semantic_clips"], 2)
+        self.assertEqual(receipt["alignment_rows"], 2)
+        self.assertEqual(receipt["sentence_audio_alignment"], "not_verified")
         self.assertFalse(receipt["remote_access_attempted"])
         self.assertFalse(receipt["human_review_performed"])
         self.assertIn("complete_idempotent_reuse", receipt["repeat_export_result"])

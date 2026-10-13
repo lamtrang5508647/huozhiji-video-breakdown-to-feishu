@@ -83,7 +83,7 @@ def fixture(output, annotation):
     analysis = {"annotation_profile": annotation.PROFILE, "taxonomy": annotation.canonical_taxonomy(),
                 "video_id": timeline["video_id"], "title": manifest["title"], "text_kind": "subtitle_excerpts",
                 "disclosure": NOTICE, "sections": [], "units": [], "source_formula": [], "reusable_formula": []}
-    content = {"visible_brand": "None — synthetic fixture", "replication_outline": "Synthetic technical example only",
+    content = {"script_shot_alignment": True, "visible_brand": "None — synthetic fixture", "replication_outline": "Synthetic technical example only",
                "audience_hypothesis": "Not measured", "claim_boundaries": [NOTICE], "sections": []}
     def runs(text):
         return [{"text": text, "char_start": 0, "char_end": len(text), "category_family": "unclassified",
@@ -158,7 +158,7 @@ def build(output, scripts, ffmpeg="ffmpeg", ffprobe="ffprobe"):
                      "--output", output / "semantic", "--render", "--ffmpeg", ffmpeg, "--ffprobe", ffprobe)
         cli("export_script_v3.py", *arguments)
         repeat = cli("export_script_v3.py", *arguments)
-        cli("render_script_analysis.py", "--input", output / "analysis.json", "--output", output / "analysis.html")
+        cli("render_script_analysis.py", "--input", output / "analysis.json", "--manifest", output / "script_manifest.json", "--output", output / "analysis.html")
         chapter_args = ("--analysis", output / "analysis.json", "--manifest", output / "script_manifest.json", "--content", output / "sections-content.json",
                         "--materials-url", "https://example.invalid/materials", "--segments-url", "https://example.invalid/segments", "--output", output / "chapter.xml")
         cli("render_platform_chapter.py", *chapter_args)
@@ -166,6 +166,11 @@ def build(output, scripts, ffmpeg="ffmpeg", ffprobe="ffprobe"):
         tree = ET.fromstring("<chapter>" + (output / "chapter.xml").read_text(encoding="utf-8") + "</chapter>")
         shots = json.loads((output / "shots/timeline.json").read_text(encoding="utf-8"))
         exported = json.loads((output / "semantic/export_manifest.json").read_text(encoding="utf-8"))
+        alignment = json.loads((output / "semantic/script-shot-alignment.json").read_text(encoding="utf-8"))
+        if alignment['rows_count'] != 2 or alignment['source_sha256'] != manifest['source']['sha256']:
+            raise RuntimeError('Synthetic alignment source identity or row count differs')
+        if [row['source_text'] for row in alignment['rows']] != ['RED', 'BLUE']:
+            raise RuntimeError('Synthetic alignment changed authored subtitle text')
         shot_clips = list((output / "shots/clips").glob("*.mp4"))
         semantic_clips = list((output / "semantic/clips").glob("*.mp4"))
         if len(shot_clips) != 2 or len(semantic_clips) != 2 or len(tree.findall("h1")) != 1 or len(tree.findall("h2")) != 5:
@@ -178,6 +183,7 @@ def build(output, scripts, ffmpeg="ffmpeg", ffprobe="ffprobe"):
             "output": str(output), "source_duration_sec": 4.0, "shot_clips": 2, "semantic_clips": 2,
             "xml_validation": xml_result, "repeat_export_result": repeat.stdout.strip(),
             "source_sha256": manifest["source"]["sha256"], "semantic_manifest_segments": len(exported["segments"]),
+            "alignment_rows": alignment['rows_count'], "sentence_audio_alignment": alignment['sentence_audio_alignment'],
             "human_review_performed": False, "remote_access_attempted": False, "browser_playback_verified": False,
             "artifact_sha256": {str(p.relative_to(output)).replace("\\", "/"): sha(p) for p in sorted(output.rglob("*")) if p.is_file()}}
         save(output / "verification.json", receipt)
