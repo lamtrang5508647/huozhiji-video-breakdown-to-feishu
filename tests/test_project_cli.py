@@ -20,6 +20,13 @@ spec.loader.exec_module(project)
 
 
 class ProjectCliTests(unittest.TestCase):
+    def test_workflow_commands_forward_arguments_help_and_exit_status(self):
+        for command, filename in [('creative', 'creative_workflow.py'), ('feedback', 'performance_feedback.py'), ('batch', 'workflow_batch.py')]:
+            with self.subTest(command=command), patch.object(project.subprocess, 'run') as run:
+                run.return_value.returncode = 7
+                self.assertEqual(project.main([command, '--help']), 7)
+                self.assertEqual(run.call_args.args[0], [sys.executable, '-B', str(project.SKILL / 'scripts' / filename), '--help'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)

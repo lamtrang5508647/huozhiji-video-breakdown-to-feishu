@@ -213,10 +213,22 @@ def acquire(arguments: list[str]) -> int:
     return subprocess.run([sys.executable, "-B", str(entrypoint), *arguments], check=False).returncode
 
 
+WORKFLOW_COMMANDS = {'creative': 'creative_workflow.py', 'feedback': 'performance_feedback.py', 'batch': 'workflow_batch.py'}
+
+
+def workflow(command: str, arguments: list[str]) -> int:
+    entrypoint = SKILL / 'scripts' / WORKFLOW_COMMANDS[command]
+    if not entrypoint.is_file():
+        raise ValueError('Bundled workflow entrypoint is missing: ' + str(entrypoint))
+    return subprocess.run([sys.executable, '-B', str(entrypoint), *arguments], check=False).returncode
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--version", action="store_true", help="Print release version and iteration")
     commands = result.add_subparsers(dest="command", required=True)
+    for name, filename in WORKFLOW_COMMANDS.items():
+        commands.add_parser(name, help='Open the ' + name + ' workflow; use ' + name + ' --help for subcommands')
     version = commands.add_parser("version", help="Print the authoritative release metadata as JSON")
     version.set_defaults(handler=lambda args: {"status": "PASS", "release": read_release(ROOT)})
     init = commands.add_parser("init", help="Create a local project with empty state; no remote calls or invented resource IDs")
@@ -270,6 +282,8 @@ def main(argv=None) -> int:
             release = read_release(ROOT)
             print(f"v{release['version']} (iteration {release['iteration']:03d}, {release['released_on']})")
             return 0
+        if arguments and arguments[0] in WORKFLOW_COMMANDS:
+            return workflow(arguments[0], arguments[1:])
         # Local help remains available while the independent provider is absent.
         if arguments and arguments[0] == "acquire":
             if "--help" in arguments[1:] or "-h" in arguments[1:]:

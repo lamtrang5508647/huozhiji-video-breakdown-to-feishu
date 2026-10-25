@@ -1,0 +1,176 @@
+{
+  "schema_version": "1.0",
+  "bundle_id": "creative-product-001",
+  "revision": 1,
+  "previous_bundle": null,
+  "synthetic": false,
+  "state": "draft",
+  "notice": "程序只核对结构、来源引用和文件哈希；不代表商品事实、原声听校、语义判断、评论真实性或投放效果已核实。所有测试卡仍未测试。",
+  "source_status": "not_provided",
+  "products": [
+    {
+      "id": "product-001",
+      "name": "待填：商品正式名称"
+    }
+  ],
+  "sources": [],
+  "facts": [],
+  "claims": [],
+  "evidence": [],
+  "comments": [],
+  "decisions": [
+    {
+      "id": "decision-001",
+      "product_id": "product-001",
+      "need_moment": "待填：出门时一只手拿着包，另一只手想开杯盖。",
+      "buyer_question": "待填：一只手能否完成开盖？具体怎么操作？",
+      "claim_ids": [],
+      "evidence_ids": [],
+      "remaining_objections": [
+        "待填：真实杯型的开盖力、漏水情况和使用限制尚未检查。"
+      ]
+    }
+  ],
+  "expression_modules": [
+    {
+      "id": "module-001",
+      "product_id": "product-001",
+      "relation": "[具体需求时刻] → [完整动作] → [适用条件] → [未解决疑问]",
+      "slots": [
+        "需求时刻",
+        "有资料的商品特征",
+        "可观察动作",
+        "限定条件"
+      ],
+      "conditions": "只替换有依据的本品事实；保留完整动作和限制，不将演示推成普遍功效。",
+      "source_claim_ids": []
+    }
+  ],
+  "topics": [
+    {
+      "id": "topic-001",
+      "product_id": "product-001",
+      "decision_id": "decision-001",
+      "need_moment": "待填：单手忙碌时开盖",
+      "angle": "待填：让观众看清按键、开盖、合盖的完整过程",
+      "module_ids": [
+        "module-001"
+      ],
+      "claim_ids": []
+    }
+  ],
+  "variants": [
+    {
+      "id": "variant-001",
+      "product_id": "product-001",
+      "topic_id": "topic-001",
+      "hypothesis": "待填：在单手忙碌场景中先展示开盖动作，是否让观看者更容易理解使用方法？",
+      "changed_variable": "待填：探索：先演示开盖的选题切入",
+      "control_notes": "待填：同一商品、价格、场景、演员、入口和视频时长；探索阶段其他差异单独记录，不能归因单个变量。",
+      "parent_variant_id": null,
+      "mode": "exploration"
+    }
+  ],
+  "cards": {
+    "topic": [
+      {
+        "id": "topic-card-001",
+        "product_id": "product-001",
+        "topic_id": "topic-001",
+        "title": "待填：一只手拿包，杯盖怎么开？",
+        "audience_hypothesis": "分析者假设：有单手操作需求的人；未经人群测量。",
+        "need_moment": "待填：出门拿包时",
+        "opening_question": "待填：一只手空不出来时，你会怎么开盖？",
+        "claim_ids": []
+      }
+    ],
+    "script": [
+      {
+        "id": "script-card-001",
+        "product_id": "product-001",
+        "variant_id": "variant-001",
+        "blocks": [
+          {
+            "id": "script-block-001",
+            "function": "场景提问与完整动作演示",
+            "voiceover": "待填：[具体使用问题]？按说明完成[本品动作]，适用条件是[已核实条件]。",
+            "on_screen": "待填：[本品已核对信息及条件]",
+            "visual_goal": "待填：看清拇指接触按钮、盖子打开和重新合盖的连续过程",
+            "fact_ids": [],
+            "claim_ids": [],
+            "evidence_ids": [],
+            "attribution": "own_product_draft",
+            "fact_check_note": "演示脚本待人工核对；动作展示不证明防漏、耐久或适合所有人。"
+          }
+        ]
+      }
+    ],
+    "shooting": [
+      {
+        "id": "shooting-card-001",
+        "product_id": "product-001",
+        "variant_id": "variant-001",
+        "shots": [
+          {
+            "id": "shoot-shot-001",
+            "script_block_id": "script-block-001",
+            "subject": "待填：同一只杯子与操作人的右手",
+            "action": "待填：拿稳杯身，拇指按键，完整开盖，停留一秒，再合盖",
+            "framing": "胸口到桌面的中景",
+            "angle": "侧前方约45度，按钮和杯盖均在画面内",
+            "movement": "固定机位，无推拉与跳切",
+            "lighting": "左前方柔光，按钮无反光遮挡",
+            "background": "干净桌面；包放在左手侧，品牌无关物品移出画面",
+            "props": "同一杯型、同一手提包、桌面标记与固定支架",
+            "focus": "锁定按钮及盖子运动平面，动作中不失焦",
+            "composition": "右手不遮挡按钮；杯口全程不出框；给字幕留上方空间",
+            "start_state": "盖子关闭，拇指未接触按钮",
+            "end_state": "开盖过程结束并重新合盖，手指离开按钮",
+            "duration_ms": 6000,
+            "acceptance_checks": [
+              "按下到开盖的动作连续无剪切",
+              "按钮、盖子与手指接触点全程可见",
+              "只描述本次可观察动作，条件与限制留在字幕里"
+            ],
+            "alternatives": [
+              {
+                "id": "visual-real-001",
+                "method": "固定机位连续实拍",
+                "setup": "同一杯型同一动作，带开始与结束状态",
+                "observable_result": "看清一次按键和开盖步骤",
+                "limitations": "一次演示不支持长期耐久或普遍适用结论",
+                "generated": false,
+                "proof_role": "product_demonstration"
+              },
+              {
+                "id": "visual-diagram-001",
+                "method": "步骤示意图",
+                "setup": "用箭头标明手指位置和动作方向，明显标注示意",
+                "observable_result": "理解操作顺序",
+                "limitations": "只作讲解插图，不当成真实效果或产品证据",
+                "generated": true,
+                "proof_role": "illustration_only"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "test": [
+      {
+        "id": "test-card-001",
+        "product_id": "product-001",
+        "variant_id": "variant-001",
+        "hypothesis": "待填：在单手忙碌场景中先展示开盖动作，是否让观看者更容易理解使用方法？",
+        "primary_metric": "操作步骤理解率（待人工测试）",
+        "metric_definition": "能按预先评分规则完整复述开盖步骤的人数 / 实际完成观看并回答的人数；不给未观看者计分。",
+        "comparison_window": "待安排同一测试日期与条件；未采样",
+        "control_notes": "待填：同一商品、价格、场景、演员、入口和视频时长；探索阶段其他差异单独记录，不能归因单个变量。",
+        "success_criterion": "测试前写下最低可接受差异及所需样本；当前不预设赢家或虚构样本数。",
+        "stopping_rule": "按预登记样本或固定截止时间结束；数据不足时保留不确定，不能提前宣告胜出。",
+        "confounders": "受试者差异、观看环境、设备、样本量及探索版本中的多个变化都可能影响判断。",
+        "status": "untested"
+      }
+    ]
+  }
+}
