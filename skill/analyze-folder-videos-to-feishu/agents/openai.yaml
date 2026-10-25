@@ -1,4 +1,4 @@
 interface:
-  display_name: "视频框架与素材拆解"
-  short_description: "整片框架、标色脚本、情绪和镜头素材，按产品平台持续归档飞书"
-  default_prompt: "使用 $analyze-folder-videos-to-feishu 继续视频拆解项目，先读取项目配置与索引，再分析整片脚本、情绪、可复用公式和镜头，校验后按授权归档飞书。"
+  display_name: "视频拆解与内容创作复盘"
+  short_description: "原片拆解、选题脚本拍摄测试四卡、批量续跑与效果回填"
+  default_prompt: "使用 $analyze-folder-videos-to-feishu 处理视频拆解与内容创作项目。先读取项目配置、真实资料与索引，按请求完成原片文案和画面分析、四卡、批量续跑或效果回填，保留来源、事实缺口与未测试状态；飞书按当前授权和目标归档。"

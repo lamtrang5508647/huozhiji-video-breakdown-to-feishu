@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "_instructions": "先填写 creative_map 的 platform/account/creative_id/variant_id（平台、账户、平台创意ID、本地版本ID）；本地ID可来自 creative-workflow.json。相同账户或创意ID在不同平台分别映射。CSV数值不得含百分号、千分符或公式；空数值表示未知。所有日期为YYYY-MM-DD（含起止日），时区需与后台导出一致，columns不能覆盖timezone/date_start。cohort_fields 必须保留 price/entry/placement，可增加人群、优惠、预算等字段，新增字段同时写入 columns。sample_criteria 是用户明确设定的最低累计样本条件，不是平台通用阈值；留空时不判断样本足够。创作内容改变须建立新variant_id并记录parent_variant_id，文件revision不是新素材版本。不要把合成示例作为真实数据。",
+  "timezone": "+08:00",
+  "synthetic": false,
+  "columns": {
+    "platform": "平台",
+    "creative_id": "平台创意ID",
+    "date": "日期",
+    "account": "账户",
+    "goal": "转化目标",
+    "attribution_window": "归因窗口",
+    "currency": "币种",
+    "price": "商品价格",
+    "entry": "承接入口",
+    "placement": "版位"
+  },
+  "cohort_fields": ["price", "entry", "placement"],
+  "numeric_fields": {
+    "impressions": {"column": "展示次数", "kind": "count", "definition": "请核对后台展示次数口径"},
+    "qualified_views": {"column": "有效观看次数", "kind": "count", "definition": "请填写后台有效观看的时长与分母口径；未提供则留空数值"},
+    "clicks": {"column": "点击次数", "kind": "count", "definition": "请核对点击是否为商品点击或全部点击"},
+    "conversions": {"column": "成交次数", "kind": "count", "definition": "请核对成交事件和退款/取消处理口径"},
+    "spend": {"column": "花费", "kind": "amount", "definition": "与币种列一致的实际花费金额"},
+    "revenue": {"column": "成交金额", "kind": "amount", "definition": "与归因窗口和币种列一致的成交金额"}
+  },
+  "metrics": {
+    "qualified_view_rate": {"label": "有效观看/展示", "numerator": "qualified_views", "denominator": "impressions", "stage": "attention"},
+    "ctr": {"label": "点击/展示", "numerator": "clicks", "denominator": "impressions", "stage": "click"},
+    "cvr": {"label": "成交/点击", "numerator": "conversions", "denominator": "clicks", "stage": "conversion"},
+    "roas": {"label": "成交金额/花费", "numerator": "revenue", "denominator": "spend", "stage": "conversion"}
+  },
+  "sample_criteria": {},
+  "creative_map": []
+}

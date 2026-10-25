@@ -34,3 +34,9 @@ FFmpeg、PyAV、Pillow、Node.js、Playwright、浏览器、Whisper、yt-dlp 与
 
 `examples/synthetic` 和演示程序中的测试内容是独立构造样例，
 只用于校验程序契约，不作为真实视频分析质量的证据。
+
+## 课程方法工作流
+
+`course-content-workflow.md` 和 `course-rule-cards.json` 根据用户提供的两份《众星引力》笔记归纳方法，保留页码与适用限制，不分发课程 PDF、扫描图或长段原文。代码、规则表述、四卡和收纳盒/教学杯/色卡案例由本轮独立编写。课程中的固定指标不作为平台规则；未采用付费评论包装或伪造演示材料。
+
+`examples/content-workflow` 的媒体、商品、评论和效果报表全部为原创合成教学数据，不属于真实业务记录。

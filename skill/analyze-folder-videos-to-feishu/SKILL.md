@@ -1,6 +1,6 @@
 ---
 name: analyze-folder-videos-to-feishu
-description: 对带货视频做原声转写与校对、整片脚本框架和完整语义段拆解，输出短语标色、可复用公式、情绪依据及逐画面片段，按产品平台归档飞书。用于视频拆解、脚本复刻和素材整理；原27字段模板需明确选择。
+description: Use when 用户要拆解本地带货视频、转写校对、短语标色、脚本复刻、素材归档飞书，或根据参考片与本品资料做选题、脚本、拍摄单、创意测试、批量续做及报表复盘；原27字段模板需明确选择。
 ---
 
 # Folder Video Breakdown To Feishu
@@ -52,6 +52,10 @@ For a packaged project or a request to continue earlier breakdowns, read [refere
 The two linked deliverables are complete script analysis/semantic segment clips and a numbered shot-material library. Document updates and Base upload are agent-operated through current Feishu tools, not an unattended end-to-end pipeline. Read [references/document-access.md](references/document-access.md) before creating or transferring a project document so the intended human can edit it.
 
 ## Choose The Workflow First
+
+**课程方法与内容生产入口。** 完整带货深拆结合 [course-content-workflow.md](references/course-content-workflow.md)：分别记录文案逻辑和画面动作次序，再解释声画如何回答具体购买问题；按需检索 [课程规则卡](references/course-rule-cards.json)。源片观察、原作者主张、本品事实、推断与新拍建议分开。课程数字、热度和案例不证明本品有效，不强补统一段序或每条源片三个镜头。
+
+用户明确要求本品选题/脚本/拍摄/测试任务时，另建 `creative_workflow.py` 创作 bundle，按需交四卡，先比较真实可拍的展示机制、写验收正反例，再安排开头。只拆原片不自动建生产卡；既有原文、标色、哈希、连续语义段、逐画面库和默认省略板块不变。区分探索、带父版本的迭代，以及有实际数据支持的已测试表达；评论只用可追溯真实问题。批量续做用 `workflow_batch.py`；报表复盘用 `performance_feedback.py`，先核指标口径和版本映射。三者均先读取安装目录 `scripts/<工具名>.py --help`，具体操作见上述参考的自然语言路由；本地卡和报告不等于远端发布或投放授权。
 
 用户要结合千川信息流带货深入拆解、复刻脚本或提升素材调用时，先读 [references/qianchuan-deep-breakdown.md](references/qianchuan-deep-breakdown.md)。在原文、语义段、逐画面基础上分析购买情境、信息推进、主张与展示材料、声画关系、行动承接及有条件的复用；不要只加标签或套统一销售公式。用既有字段和 `analysis_mode: qianchuan_deep` 显示具体问题、作用、论证/声画关系和复用条件，不新增逐视频文档。情绪按实际变化记录，原作者主张不等于证据已验证。纯整理与深拆不进入 AI 任务台、生成服务或广告投放。
 

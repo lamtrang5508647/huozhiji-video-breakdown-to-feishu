@@ -36,6 +36,8 @@ whisper.cpp 路径改用 `--engine whisper-cpp --model <local-model.bin> --whisp
 
 ## Analysis Shape
 
+分析时按 [课程方法的双结构记录](course-content-workflow.md#1-用两条线解释一个完整语义段) 分开文案逻辑与画面动作，再写声画关系；一段多镜头仍以真实交集对齐。新片制作请求按该参考生成独立的选题、脚本、拍摄或测试卡，记录本品事实、候选机制、执行条件和未决项，不覆盖下面的源片字段。课程建议的探索数量、成片公式和效果标签不改变完整语义段边界或默认报告显示范围。
+
 The video-level record should state the source strategy, ordered argument/story framework, source transition logic, reusable structure, adaptation outline, required evidence, claim boundaries, and review status. Keep the source framework and proposed adaptation in separate fields.
 
 Each script-segment record should include:

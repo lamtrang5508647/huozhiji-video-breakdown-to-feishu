@@ -1,0 +1,14 @@
+{
+  "_instructions": "独立回填的可编辑占位注册表；已有创意生产输出时直接把 --registry 指向 creative-workflow.json。id 必须稳定且与映射匹配，不用平台ID替代本地版本ID。",
+  "variants": [
+    {
+      "id": "variant-001",
+      "product_id": "product-001",
+      "hypothesis": "请填写本次要观察的具体假设",
+      "changed_variable": "请填写实际改变的变量",
+      "control_notes": "请填写保持相同的条件、同时变化的条件及无法控制的因素",
+      "parent_variant_id": null,
+      "mode": "exploration"
+    }
+  ]
+}
