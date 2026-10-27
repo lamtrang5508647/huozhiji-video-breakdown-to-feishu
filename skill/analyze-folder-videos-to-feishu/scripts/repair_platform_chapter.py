@@ -6,7 +6,7 @@ fails closed after an interrupted write; inspect live state before reconciliatio
 import argparse,copy,datetime,hashlib,json,pathlib,subprocess,sys,xml.etree.ElementTree as ET
 from sync_video_base import Lark,atomic_json
 from check_docx_registry import check,canonical
-from render_platform_chapter import effective_signature
+from render_platform_chapter import effective_signature, LAYOUT_PROFILES
 from phrase_annotation import validate_supervisor_review
 from publication_review import validate_publication_review
 from project_paths import registry_path
@@ -26,11 +26,11 @@ def main():
  parser=argparse.ArgumentParser(description=__doc__)
  for name in ['project','workspace','job','layout']:parser.add_argument('--'+name,required=True,type=pathlib.Path)
  for name in ['materials-url','segments-url']:parser.add_argument('--'+name,required=True)
- parser.add_argument('--apply',action='store_true');parser.add_argument('--approved-analysis-sha256');parser.add_argument('--approved-manifest-sha256');parser.add_argument('--semantic-review',type=pathlib.Path);parser.add_argument('--ignore-proxy-env',action='store_true');args=parser.parse_args()
+ parser.add_argument('--layout-profile', choices=LAYOUT_PROFILES); parser.add_argument('--apply',action='store_true');parser.add_argument('--approved-analysis-sha256');parser.add_argument('--approved-manifest-sha256');parser.add_argument('--semantic-review',type=pathlib.Path);parser.add_argument('--ignore-proxy-env',action='store_true');args=parser.parse_args()
  project=args.project.resolve();workspace=args.workspace.resolve();j=args.job.resolve();payload=args.layout.resolve();wanted=nodes(payload.read_text(encoding='utf-8'))
  from render_platform_chapter import validate_layout
  analysis=json.loads((j/'analysis.json').read_text(encoding='utf-8'));manifest=json.loads((j/'script_manifest.json').read_text(encoding='utf-8'));content=json.loads((j/'sections-content.json').read_text(encoding='utf-8'))
- validate_layout(payload.read_text(encoding='utf-8'),analysis,manifest,content,args.materials_url,args.segments_url)
+ validate_layout(payload.read_text(encoding='utf-8'),analysis,manifest,content,args.materials_url,args.segments_url,layout_profile=args.layout_profile)
  if args.apply:
   assert args.approved_analysis_sha256==hashlib.sha256((j/'analysis.json').read_bytes()).hexdigest() and args.approved_manifest_sha256==hashlib.sha256((j/'script_manifest.json').read_bytes()).hexdigest(),'Exact analysis and manifest approval hashes required'
   assert args.semantic_review and args.semantic_review.is_file(),'v9 needs a separate, source-bound supervising text review'
@@ -98,7 +98,7 @@ def main():
   check(registry,inserted);atomic_json(rp,registry);receipt['completed_groups'].append(label);atomic_json(receiptp,receipt);pending.unlink()
   print(json.dumps({'video_id':vid,'group':label,'status':'readback_verified_anchors_preserved'}),flush=True)
  final=fetch();check(registry,final);verify(chapter(final,v['chapter_root_block_id']),wanted)
- validate_layout(''.join(ET.tostring(n,encoding='unicode') for n in chapter(final,v['chapter_root_block_id'])),analysis,manifest,content,args.materials_url,args.segments_url)
+ validate_layout(''.join(ET.tostring(n,encoding='unicode') for n in chapter(final,v['chapter_root_block_id'])),analysis,manifest,content,args.materials_url,args.segments_url,layout_profile=args.layout_profile)
  version='v9' if analysis.get('annotation_profile')=='phrase-functions/v9' else 'v8'
  v['layout_status']='golden_h2_'+version+'_verified';v['approved_analysis_sha256']=hashlib.sha256((j/'analysis.json').read_bytes()).hexdigest();v['annotation_profile']=analysis.get('annotation_profile','legacy/v8');atomic_json(rp,registry)
  atomic_json(j/'docx-after-reformat.json',final);receipt.update(status='golden_h2_'+version+'_live_readback_passed',h1_and_segment_anchors_preserved=True,other_chapters_preserved=True,revision=final['data']['document']['revision_id'],semantic_review_scope='text functions only; source-video/audio truth not inferred');atomic_json(receiptp,receipt)

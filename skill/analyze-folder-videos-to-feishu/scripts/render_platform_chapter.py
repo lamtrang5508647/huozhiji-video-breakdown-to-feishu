@@ -40,6 +40,10 @@ NATIVE_COLORS = {'red': 'rgb(216,57,49)', 'green': 'rgb(46,161,33)',
                  'orange': 'rgb(222,120,2)', 'gray': 'rgb(143,149,158)',
                  'light-yellow': 'rgba(255,246,122,0.8)'}
 
+SOURCE_READING_PROFILE = 'source-reading/v9.2'
+LEGACY_LAYOUT_PROFILE = 'legacy/v9.1'
+LAYOUT_PROFILES = (SOURCE_READING_PROFILE, LEGACY_LAYOUT_PROFILE)
+
 
 def require(condition, message):
     if not condition:
@@ -104,6 +108,95 @@ def checked_url(value):
 def reading_runs(unit, *, strict=False):
     """Explicit reviewed display annotations; never infer transcript text from notes."""
     return reviewed_reading_runs(unit, strict=strict)
+
+
+def _source_reading_provenance(analysis):
+    """Keep source/status metadata outside the continuously readable source."""
+    kind = analysis.get('text_kind')
+    if kind == 'subtitle_excerpts':
+        source = '现有字幕摘录连续排版；不等同于完整原声转写。'
+    elif kind == 'user_provided_copy':
+        source = '用户提供文案连续排版；不据此推定原音已经听校。'
+    else:
+        source = '现有原文字段连续排版；文字来源类型：' + str(kind or '未提供') + '。'
+    audio_status = analysis.get('audio_review_status')
+    if audio_status is None and isinstance(analysis.get('review_status'), dict):
+        audio_status = analysis['review_status'].get('audio')
+    if isinstance(audio_status, str) and audio_status.strip():
+        source += '原音校对状态：' + audio_status + '。'
+    elif kind == 'subtitle_excerpts':
+        source = '现有字幕摘录连续排版；原音未逐句听校。不等同于完整原声转写。'
+    else:
+        source += '原音逐句听校状态：未提供。'
+    for key, label in (('source_text_status', '原文状态'),
+                       ('transcript_status', '转写状态'), ('status', '原记录状态')):
+        value = analysis.get(key)
+        if isinstance(value, str) and value.strip():
+            source += label + '：' + value + '。'
+    if analysis.get('disclosure'):
+        source += str(analysis['disclosure'])
+    return paragraph('原稿来源/校对状态：', source)
+
+
+def render_source_reading(analysis):
+    """Return an insertable source-only reading fragment, with provenance first.
+
+    Each source section becomes one natural paragraph. Nonempty units use the
+    same U+3000 layout separator as the detailed source, without punctuation or deduplication. Existing, explicitly
+    reviewed reading scopes and observation-note exclusions are respected;
+    every visible source character keeps its existing functional style. No
+    formula/content/manifest, navigation, file access or publication is needed.
+    """
+    require(isinstance(analysis, dict), 'Source reading analysis must be an object')
+    kind = analysis.get('text_kind')
+    require(not isinstance(kind, str) or not kind.startswith('authored_'),
+            'Authored adaptations cannot be rendered as source reading')
+    sections = analysis.get('sections')
+    require(isinstance(sections, list) and bool(sections), 'Source reading sections required')
+    require(all(isinstance(s, dict) and isinstance(s.get('id'), str) and s['id'].strip()
+                for s in sections), 'Invalid source reading section identity')
+    ids = [s['id'] for s in sections]
+    require(len(ids) == len(set(ids)), 'Duplicate source reading section identity')
+    units = analysis.get('units')
+    require(isinstance(units, list) and bool(units), 'Source reading units required')
+    require(all(isinstance(u, dict) and isinstance(u.get('id'), str) and u['id'].strip()
+                for u in units), 'Invalid source reading unit identity')
+    require(len({u['id'] for u in units}) == len(units), 'Duplicate source reading unit identity')
+    positions = {section_id: index for index, section_id in enumerate(ids)}
+    require(all(u.get('section_id') in positions for u in units), 'Unknown source reading section')
+    order = [positions[u['section_id']] for u in units]
+    require(order == sorted(order), 'Source reading sections are out of source order')
+    paragraphs = {section_id: [] for section_id in ids}
+    notes = []
+    strict = is_v9(analysis)
+    profile = analysis.get('annotation_profile')
+    for unit in units:
+        validate_runs(unit.get('source_text'), unit.get('phrase_runs'),
+                      context=unit['id'], strict=strict)
+        runs = reading_runs(unit, strict=strict)
+        if runs:
+            # XML otherwise normalizes literal CR/CRLF to LF while parsing.
+            paragraphs[unit['section_id']].append(
+                color_runs(runs, profile=profile).replace('\r', '&#13;'))
+        if unit.get('display_kind') == 'observation_note' or 'reading_span' in unit:
+            note = unit.get('reading_note')
+            if note:
+                notes.append(note)
+    out = [_source_reading_provenance(analysis)]
+    if notes:
+        out.append(paragraph('阅读范围/缺口说明：', '；'.join(notes)))
+    if not any(paragraphs.values()):
+        out.append(paragraph('可读原文状态：', '当前仅有辨读注释，暂无可读原文。'))
+    out.append('<h2>原稿｜标色阅读</h2>')
+    out.extend('<p>' + '　'.join(paragraphs[section_id]) + '</p>'
+               for section_id in ids if paragraphs[section_id])
+    return '\n'.join(out) + '\n'
+
+
+def _layout_profile(analysis, override=None):
+    profile = override if override is not None else analysis.get('layout_profile', LEGACY_LAYOUT_PROFILE)
+    require(profile in LAYOUT_PROFILES, 'Unknown layout_profile')
+    return profile
 
 
 def validate_inputs(analysis, manifest, content, materials_url, segments_url):
@@ -216,7 +309,7 @@ def alignment_paragraphs(segment, units, detail, profile):
     return out
 
 
-def _render(analysis, manifest, content, materials_url, segments_url):
+def _render(analysis, manifest, content, materials_url, segments_url, *, layout_profile):
     profile = analysis.get('annotation_profile')
     deep = content.get('analysis_mode') == 'qianchuan_deep'
     def formula(steps):
@@ -234,6 +327,8 @@ def _render(analysis, manifest, content, materials_url, segments_url):
            '<p><b>镜头素材库：</b><a href="' + esc(materials_url) + '">素材资产库·视频片段（点击打开）</a>；'
            + '<b>脚本段视频：</b><a href="' + esc(segments_url) + '">查看'
            + str(len(manifest['segments'])) + '个内容段视频</a></p>',
+           *([render_source_reading(analysis).rstrip('\n')]
+             if layout_profile == SOURCE_READING_PROFILE else []),
            '<h2>原片结构公式</h2>', '<p>' + formula(analysis['source_formula']) + '</p>',
            *([paragraph('原片表达策略：', content['strategy'])] if deep else []),
            '<p>这是源片表达顺序；经历、机制、效果和认证说法属于源片主张，未因此获得事实验证。</p>',
@@ -287,9 +382,10 @@ def _render(analysis, manifest, content, materials_url, segments_url):
     return '\n'.join(out) + '\n'
 
 
-def render(analysis, manifest, content, materials_url, segments_url):
+def render(analysis, manifest, content, materials_url, segments_url, *, layout_profile=None):
+    profile = _layout_profile(analysis, layout_profile)
     validate_inputs(analysis, manifest, content, materials_url, segments_url)
-    return _render(analysis, manifest, content, materials_url, segments_url)
+    return _render(analysis, manifest, content, materials_url, segments_url, layout_profile=profile)
 
 
 def _effective_attrs(node):
@@ -332,14 +428,15 @@ def effective_signature(node):
     return node.tag, tuple(sorted(_effective_attrs(node).items())), tuple(chars)
 
 
-def validate_layout(xml, analysis, manifest, content, materials_url, segments_url):
+def validate_layout(xml, analysis, manifest, content, materials_url, segments_url, *, layout_profile=None):
     """Reject omitted/reordered fields, altered source characters/styles or navigation.
 
     Whitespace between blocks and existing server block IDs are ignored; text
     inside a block, nesting, style attributes and link destinations are exact.
     This validates layout/provenance, not media analysis or live Docx rendering.
     """
-    expected = render(analysis, manifest, content, materials_url, segments_url)
+    profile = _layout_profile(analysis, layout_profile)
+    expected = render(analysis, manifest, content, materials_url, segments_url, layout_profile=profile)
     actual_tree = ET.fromstring('<chapter>' + xml + '</chapter>')
     expected_tree = ET.fromstring('<chapter>' + expected + '</chapter>')
     h1s = [''.join(n.itertext()) for n in actual_tree.findall('h1')]
@@ -351,7 +448,7 @@ def validate_layout(xml, analysis, manifest, content, materials_url, segments_ur
     for index, (actual, wanted) in enumerate(zip(actual_tree, expected_tree)):
         require(effective_signature(actual) == effective_signature(wanted),
                 f"Block {index + 1} differs: source text, color, field order, evidence or navigation")
-    return {'status': 'PASS', 'video_id': manifest['video_id'], 'blocks': len(actual_tree),
+    return {'status': 'PASS', 'video_id': manifest['video_id'], 'layout_profile': profile, 'blocks': len(actual_tree),
             'h2_count': len(h2s), 'sections': len(manifest['segments']),
             'annotation_validation': validate_annotations(analysis, content),
             'scope': 'local fixed-layout and source-text/style/navigation validation; no remote verification'}
@@ -362,13 +459,14 @@ def main(argv=None):
     for name in ('analysis', 'manifest', 'content', 'materials-url', 'segments-url', 'output'):
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--validate-only', action='store_true', help='Validate the existing output without overwriting it')
+    parser.add_argument('--layout-profile', choices=LAYOUT_PROFILES, help='Select source reading or historical layout')
     args = parser.parse_args(argv)
     analysis, manifest, content = [json.loads(Path(p).read_text(encoding='utf-8-sig'))
                                    for p in (args.analysis, args.manifest, args.content)]
     path = Path(args.output)
     xml = path.read_text(encoding='utf-8') if args.validate_only else render(
-        analysis, manifest, content, args.materials_url, args.segments_url)
-    receipt = validate_layout(xml, analysis, manifest, content, args.materials_url, args.segments_url)
+        analysis, manifest, content, args.materials_url, args.segments_url, layout_profile=args.layout_profile)
+    receipt = validate_layout(xml, analysis, manifest, content, args.materials_url, args.segments_url, layout_profile=args.layout_profile)
     if not args.validate_only:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(xml, encoding='utf-8')

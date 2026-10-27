@@ -56,6 +56,50 @@ class AlignmentDeliveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'boolean'):
             renderer.render(*self.args)
 
+    def test_source_reading_and_alignment_coexist_and_preserve_legacy_validation(self):
+        old = renderer.render(*self.args)
+        xml = renderer.render(*self.args, layout_profile=renderer.SOURCE_READING_PROFILE)
+        self.assertIn('<h2>原稿｜标色阅读</h2>', xml)
+        self.assertIn('脚本与镜头对齐：', xml)
+        self.assertIn('原字幕摘录：', xml)
+        self.assertIn('镜头处理（组级建议）', xml)
+        self.assertEqual(renderer.validate_layout(xml, *self.args, layout_profile=renderer.SOURCE_READING_PROFILE)['status'], 'PASS')
+        self.assertEqual(renderer.validate_layout(old, *self.args)['status'], 'PASS')
+        self.assertNotIn('原稿｜标色阅读', old)
+        with self.assertRaises(ValueError):
+            renderer.validate_layout(old, *self.args, layout_profile=renderer.SOURCE_READING_PROFILE)
+        broken = copy.deepcopy(self.manifest)
+        broken['segments'][0]['source_excerpt']['items'][0]['shot_id'] = 'foreign-shot'
+        with self.assertRaises(ValueError):
+            renderer.render(self.analysis, broken, self.content, self.args[3], self.args[4], layout_profile=renderer.SOURCE_READING_PROFILE)
+
+    def test_publish_and_repair_cli_forward_explicit_profile_before_remote_access(self):
+        import publish_platform_chapter as publisher
+        import repair_platform_chapter as repairer
+        self.content['script_shot_alignment'] = True
+        xml = renderer.render(*self.args, layout_profile=renderer.SOURCE_READING_PROFILE)
+        payload = self.root / 'chapter.xml'
+        payload.write_text(xml, encoding='utf-8')
+        project = self.root / 'project'
+        (project / 'config').mkdir(parents=True)
+        profile = {'base_id': 'synthetic-base', 'identity': 'bot'}
+        (project / 'config/project.json').write_text(json.dumps(profile), encoding='utf-8')
+        registry = self.root / 'registry.json'
+        registry.write_text(json.dumps({'base_id': 'synthetic-base', 'groups': {'sample': {'doc_token': 'synthetic-doc'}}}), encoding='utf-8')
+        common = ['--project', str(project), '--workspace', str(self.root), '--job', str(self.root),
+                  '--layout', str(payload), '--materials-url', self.args[3], '--segments-url', self.args[4],
+                  '--layout-profile', renderer.SOURCE_READING_PROFILE]
+        class StopBeforeRemote(Exception):
+            pass
+        for module, extra in ((publisher, ['--group-key', 'sample']), (repairer, [])):
+            target = 'publish_platform_chapter.validate_layout' if module is publisher else 'render_platform_chapter.validate_layout'
+            with self.subTest(module=module.__name__), patch.object(sys, 'argv', ['cmd'] + common + extra), \
+                    patch.object(publisher, 'registry_path', return_value=registry), \
+                    patch(target, side_effect=StopBeforeRemote) as validate:
+                with self.assertRaises(StopBeforeRemote):
+                    module.main()
+                self.assertEqual(validate.call_args.kwargs['layout_profile'], renderer.SOURCE_READING_PROFILE)
+
     def test_docx_observation_note_is_not_relabelled_as_subtitle(self):
         self.analysis['units'][0]['display_kind'] = 'observation_note'
         self.analysis['units'][0]['reading_note'] = 'Synthetic label is an observation for this test'

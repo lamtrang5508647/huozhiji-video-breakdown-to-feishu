@@ -31,6 +31,10 @@ Process videos one at a time from the user's explicit source and target. Keep an
 
 委派给较小模型时，先读 [execution-quality-contract.md](references/execution-quality-contract.md)，做有来源证据的小样并独立复核；通过后再展开。不能让模型自行宣布与其他模型能力相同。
 
+**仿写交付前逐版整稿复核。** 按 [仿写交付规范](references/imitation-authoring.md) 对照原稿、完整改写、框架与镜头；按 [故事逻辑复核](references/story-logic-review.md) 实际阅读每版口播、核对人物关系、行动因果、经历归属及镜头，填写绑定当前稿件的审核记录并运行 `scripts/story_logic_review.py`。没有独立审阅者时如实记录同人第二遍复核；程序只检查记录和引用，不判断语义或事实。
+
+**原稿连续标色阅读。** 新生产的分析在 `analysis.json` 明确设置 `layout_profile: "source-reading/v9.2"`，然后调用既有渲染、发布与回读流程；新增 H2「原稿｜标色阅读」，仅连续展示现有来源文本及其短语颜色，来源和校对状态单独说明，不把字幕摘录充作听校原声。既有输入不设置 profile 时维持原布局。渲染、发布及修复工具均可选 `--layout-profile source-reading/v9.2`，但整个流程必须一致；推荐写入 analysis 以便审批哈希和回读持续绑定。源文文本与已审阅的范围、颜色不能改写。
+
 脚本段输入先运行 `validate_section_content.py`：绑定当前时间线哈希，逐段具体写填空句和拍法，实际情绪事件须落在所引镜头内。新数据显式区分实际变化、无明显变化和证据不足，旧四阶段数据保持兼容；不强补转折，也不截断事件。重复整段套话、旧镜头引用、状态不一致均退回；通过此检查仍需独立内容复核。
 
 **句内标色使用 v9 合约与 9.1 上下文复核。** 先读 [phrase-annotation-v9.md](references/phrase-annotation-v9.md)、[context-calibration.md](references/context-calibration.md) 和 [context-review.md](references/context-review.md)。每条字幕、整片公式和段内公式必须明确审阅短语功能及其上下文，再交给统一渲染器；禁止用镜头编号范围、段标签、关键词或缺省颜色覆盖整句。逐句记录阅读理由、相邻语境与保留/修改决定；9.1 发布须提交绑定当前输入哈希的 `context-review.json`，不能仅写“全部已审核”。`phrase_annotation.py` 和 `context_review.py` 只检查来源、字符、标签与审阅记录，不判定含义正确。执行模型不得把结构检查 PASS 改写成“语义审核通过”；发布前监督者须裁定争议、核对原文和公式及跨视频同类表达。钩子与惊讶反应、信息与评价、出处与结果、已发生体验与未来计划分别判断；不得仅因处在开头就整段标红，也不得把灰色当难句的缺省颜色。

@@ -2,6 +2,8 @@
 
 Use this contract when delegating breakdown work or continuing a project with mixed models. It makes artifacts comparable; it does not make models equally capable. Record the actual available model when known. Never identify a model from an agent label alone; use the actual available model metadata. User authorization to continue ingestion carries forward; these are execution checks, not another permission request.
 
+For authored imitations, apply [story-logic-review.md](story-logic-review.md) before delivery. Reviewers read each continuous script, source and shot plan and record concrete quotations; the validator checks completeness and binding rather than story meaning or truth.
+
 ## Keep the three units distinct
 
 1. A **script segment** contains a complete question, claim, response, or narrative development. Boundaries follow meaning and adjacent speech. Several real cuts may occur inside one segment. Do not split a sentence just to match the picture change.

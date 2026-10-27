@@ -43,7 +43,8 @@ def main() -> int:
     sys.path.insert(0, str(SCRIPTS))
     suite = unittest.defaultTestLoader.discover(str(ROOT / "tests"), pattern="test_*.py")
     for relative in ("tests/check_section_content.py", "tests/check_material_gallery.py",
-                     "skill/analyze-folder-videos-to-feishu/scripts/test_render_platform_chapter.py"):
+                     "skill/analyze-folder-videos-to-feishu/scripts/test_render_platform_chapter.py",
+                     "skill/analyze-folder-videos-to-feishu/scripts/test_story_logic_review.py"):
         suite.addTests(file_suite(ROOT / relative))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     media = "not_requested"
