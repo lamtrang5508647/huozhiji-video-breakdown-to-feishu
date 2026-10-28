@@ -14,6 +14,19 @@ spec.loader.exec_module(mod)
 
 @unittest.skipUnless(shutil.which('ffmpeg'), 'ffmpeg unavailable')
 class DetailFramesTest(unittest.TestCase):
+    def test_positive_video_origin_keeps_container_relative_pts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); video = root / 'offset.mkv'
+            subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=80x60:rate=10:duration=2',
+                            '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=2',
+                            '-filter:v','setpts=PTS+0.2/TB','-fps_mode','passthrough',
+                            '-c:v','mpeg4','-c:a','pcm_s16le',str(video)],check=True,capture_output=True)
+            result = mod.prepare(video, root / 'out', .2, .51)
+            self.assertEqual(result['container_start_sec'], 0)
+            self.assertAlmostEqual(result['video_stream_start_sec'], .2, places=3)
+            self.assertEqual([round(x['source_sec'], 1) for x in result['frames']], [.2, .3, .4, .5])
+            self.assertEqual(result['review_status'], 'not_reviewed')
+
     def test_original_pts_exact_range_and_real_frame_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); video = root / 'source.mp4'

@@ -2,7 +2,8 @@
 """Extract full-resolution frames with source PTS for an identified local range.
 
 This prepares evidence only; it does not decide whether anyone saw motion or
-heard audio. End is exclusive. Source with unknown/nonzero origin is rejected.
+heard audio. End is exclusive. Container origin must be known and zero; a
+known nonnegative video stream offset is preserved in source PTS.
 """
 from __future__ import annotations
 import argparse
@@ -36,12 +37,16 @@ def prepare(source: Path, output: Path, start: float, end: float):
         stream = container.streams.video[0]
         if container.start_time is None or abs(container.start_time / av.time_base) > 1e-6:
             raise ValueError('Unsupported nonzero or unknown container origin')
-        if stream.start_time is None or stream.time_base is None or abs(float(stream.start_time * stream.time_base)) > 1e-6:
-            raise ValueError('Unsupported nonzero or unknown video stream origin')
+        if stream.start_time is None or stream.time_base is None:
+            raise ValueError('Unsupported unknown video stream origin')
+        video_start = float(stream.start_time * stream.time_base)
+        if not math.isfinite(video_start) or video_start < 0:
+            raise ValueError('Unsupported negative video stream origin')
         if container.duration is None: raise ValueError('Unknown duration')
         duration = container.duration / av.time_base
         if not math.isfinite(duration) or duration <= 0 or end > duration + 1e-6:
             raise ValueError('Range exceeds source duration')
+        if video_start >= duration: raise ValueError('Video start time outside container duration')
         if stream.codec_context.width * stream.codec_context.height > 16_000_000:
             raise ValueError('Frame resolution exceeds 16 megapixels')
         output.mkdir(parents=True, exist_ok=False)
@@ -51,11 +56,12 @@ def prepare(source: Path, output: Path, start: float, end: float):
         previous_time = None
         total_pixels = 0
         for frame in container.decode(stream):
-            if frame.pts is None or frame.time_base is None: continue
+            if frame.pts is None or frame.time_base is None: raise ValueError('Video frame timestamp missing')
             t = float(frame.pts * frame.time_base)
             if first:
                 first = False
-                if abs(t) > 1e-6: raise ValueError('First decoded frame PTS is not zero')
+                if abs(t - video_start) > max(float(stream.time_base), float(frame.time_base)) + 1e-6:
+                    raise ValueError('First decoded video PTS differs from declared stream start')
             if previous_time is not None and t <= previous_time:
                 raise ValueError('Video frame PTS is not strictly increasing')
             previous_time = t
@@ -87,6 +93,7 @@ def prepare(source: Path, output: Path, start: float, end: float):
     sheet_path = output / 'contact-sheet.jpg'
     sheet.save(sheet_path, quality=90)
     result = {'schema': 'bilibili-detail-frames/v1', 'source_sha256': source_hash,
+              'container_start_sec': 0, 'video_stream_start_sec': video_start,
               'source_duration_sec': duration, 'requested_start_sec': start,
               'requested_end_sec_exclusive': end, 'time_mapping': 'source_pts_times_time_base',
               'frames': frames, 'contact_sheet': {'path': sheet_path.name, 'sha256': digest(sheet_path)},

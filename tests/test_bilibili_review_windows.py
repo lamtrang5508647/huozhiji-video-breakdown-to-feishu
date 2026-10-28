@@ -17,6 +17,32 @@ spec.loader.exec_module(mod)
 
 @unittest.skipUnless(shutil.which('ffmpeg'), 'ffmpeg unavailable')
 class WindowsTest(unittest.TestCase):
+    def test_positive_video_offset_retains_pts_and_audio_zero_origin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); source = root / 'video-delayed.mkv'
+            subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=80x60:rate=10:duration=2',
+                            '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=2',
+                            '-filter:v','setpts=PTS+0.2/TB','-fps_mode','passthrough',
+                            '-c:v','mpeg4','-c:a','pcm_s16le',str(source)],check=True,capture_output=True)
+            result = mod.prepare(source, root / 'out', 1, 2)
+            self.assertEqual(result['container_start_sec'], 0)
+            self.assertAlmostEqual(result['video_stream_start_sec'], .2, places=3)
+            self.assertAlmostEqual(result['windows'][0]['sample_times'][0]['actual_pts_sec'], .2, places=3)
+            self.assertAlmostEqual(result['windows'][0]['audio']['source_coverage_sec'][0]['start_sec'], 0, places=3)
+            self.assertEqual(result['windows'][0]['audio']['coverage_status'], 'complete')
+            self.assertEqual(result['windows'][0]['review']['audio'], 'not_reviewed')
+
+    def test_positive_audio_offset_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); source = root / 'audio-delayed.mkv'
+            subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=80x60:rate=10:duration=2',
+                            '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=2',
+                            '-filter:a','asetpts=PTS+0.2/TB','-fps_mode','passthrough',
+                            '-c:v','mpeg4','-c:a','pcm_s16le',str(source)],check=True,capture_output=True)
+            with self.assertRaisesRegex(ValueError, 'nonzero or unknown audio stream'):
+                mod.prepare(source, root / 'out', 1, 2)
+            self.assertFalse((root / 'out').exists())
+
     def test_media_evidence_actual_pts_hash_and_unreviewed_audio(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); source = root / 'source.mp4'

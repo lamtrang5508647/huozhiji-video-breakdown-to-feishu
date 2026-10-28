@@ -85,13 +85,19 @@ def prepare(source: Path, output: Path, window_sec: float = 10, fps: float = 2):
         # we can align exactly to decoded PTS without guessing offsets.
         if container.start_time is None or abs(container.start_time / av.time_base) > 0.000001:
             raise ValueError('Unsupported nonzero or unknown container start time')
-        relevant = [stream] + ([container.streams.audio[0]] if container.streams.audio else [])
-        for s in relevant:
-            if s.start_time is None or s.time_base is None or abs(float(s.start_time * s.time_base)) > 0.000001:
-                raise ValueError('Unsupported nonzero or unknown stream start time')
+        if stream.start_time is None or stream.time_base is None:
+            raise ValueError('Unsupported unknown video stream start time')
+        video_start = float(stream.start_time * stream.time_base)
+        if not math.isfinite(video_start) or video_start < 0:
+            raise ValueError('Unsupported negative video stream start time')
+        if container.streams.audio:
+            audio_stream = container.streams.audio[0]
+            if audio_stream.start_time is None or audio_stream.time_base is None or abs(float(audio_stream.start_time * audio_stream.time_base)) > 0.000001:
+                raise ValueError('Unsupported nonzero or unknown audio stream start time')
         if container.duration is None: raise ValueError('Container duration unavailable')
         duration = container.duration / av.time_base
         if duration <= 0 or not math.isfinite(duration): raise ValueError('Invalid duration')
+        if video_start >= duration: raise ValueError('Video start time outside container duration')
         if duration > 1800 or duration * fps > 3600 or window_sec * fps > 200:
             raise ValueError('Input too large for one review batch; use a smaller rate or prepare an identified source clip')
         has_audio = bool(container.streams.audio)
@@ -121,12 +127,16 @@ def prepare(source: Path, output: Path, window_sec: float = 10, fps: float = 2):
         active = 0
         frames = []
         first = True
+        previous_pts = None
         for frame in container.decode(stream):
-            if frame.pts is None: continue
+            if frame.pts is None or frame.time_base is None: raise ValueError('Video frame timestamp missing')
             t = float(frame.pts * frame.time_base)
             if first:
                 first = False
-                if abs(t) > 0.000001: raise ValueError('First decoded video PTS is not zero')
+                if abs(t - video_start) > max(float(stream.time_base), float(frame.time_base)) + 0.000001:
+                    raise ValueError('First decoded video PTS differs from declared stream start')
+            if previous_pts is not None and t <= previous_pts: raise ValueError('Video frame PTS is not strictly increasing')
+            previous_pts = t
             if t < 0: continue
             target = sample_no / fps
             if target >= duration: break
@@ -186,6 +196,8 @@ def prepare(source: Path, output: Path, window_sec: float = 10, fps: float = 2):
         w['review'] = {'visual': 'not_reviewed', 'audio': 'not_reviewed' if has_audio else 'no_audio_stream'}
     if digest(source) != source_hash: raise ValueError('Source changed during preparation; discard partial output')
     result = {'schema':'bilibili-review-windows/v1', 'source_sha256':source_hash, 'duration_sec':duration,
+              'container_start_sec': 0, 'video_stream_start_sec': video_start,
+              'time_mapping': 'source_pts_times_time_base; container origin zero, no stream offset subtracted',
               'sampling_fps':fps, 'window_sec':window_sec, 'windows':windows,
               'scope':'Contact sheets are sampled frames, not continuous playback; audio clips are unreviewed. No semantic interpretation or listening is asserted.'}
     (output / 'manifest.json').write_text(json.dumps(result, ensure_ascii=False, indent=2)+'\n', encoding='utf8')
