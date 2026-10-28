@@ -19,6 +19,53 @@ def digest(path):
     return h.hexdigest()
 
 
+def audio_source_coverage(source, rate, windows):
+    """Inspect decoded audio PTS; sample values (including silence) are immaterial.
+
+    The container's declared stream duration bounds decoder padding when present.
+    Missing PTS cannot establish where samples belong and is returned as unknown.
+    """
+    import av
+    spans = []
+    unknown = False
+    with av.open(str(source)) as media:
+        stream = media.streams.audio[0]
+        # Coarse container clocks quantize frame PTS. A 1 ms Matroska clock
+        # legitimately places consecutive PCM frames up to 1 ms apart.
+        clock_step = float(stream.time_base) if stream.time_base is not None else float('inf')
+        tolerance = max(2 / rate, clock_step + 2 / rate)
+        if not math.isfinite(tolerance) or tolerance > 0.01:
+            unknown = True
+            tolerance = 2 / rate
+        stream_end = (float(stream.start_time * stream.time_base) +
+                      float(stream.duration * stream.time_base)) if stream.duration is not None else None
+        for frame in media.decode(stream):
+            if frame.pts is None or frame.time_base is None or not frame.sample_rate:
+                unknown = True
+                continue
+            start = float(frame.pts * frame.time_base)
+            end = start + frame.samples / frame.sample_rate
+            if stream_end is not None:
+                end = min(end, stream_end)
+            start = max(0.0, start)
+            if end > start:
+                spans.append((start, end))
+    spans.sort()
+    merged = []
+    for start, end in spans:
+        if merged and start <= merged[-1][1] + tolerance:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    result = []
+    for w in windows:
+        clipped = [(max(start, w['start_sec']), min(end, w['end_sec'])) for start, end in merged
+                   if end > w['start_sec'] and start < w['end_sec']]
+        result.append([{'start_sec': round(start, 6), 'end_sec': round(end, 6)}
+                       for start, end in clipped if end > start])
+    return result, unknown, tolerance
+
+
 def prepare(source: Path, output: Path, window_sec: float = 10, fps: float = 2):
     import av
     from PIL import Image, ImageDraw
@@ -99,6 +146,7 @@ def prepare(source: Path, output: Path, window_sec: float = 10, fps: float = 2):
         if first: raise ValueError('No timestamped frames decoded')
         write_sheet(active, frames)
         for i in range(active + 1, n): write_sheet(i, [])
+    source_coverage, coverage_unknown, audio_tolerance = audio_source_coverage(source, audio_rate, windows) if has_audio else (None, False, 0)
     for i, w in enumerate(windows):
         if has_audio:
             path = output / f'window-{i+1:04d}.wav'
@@ -108,7 +156,31 @@ def prepare(source: Path, output: Path, window_sec: float = 10, fps: float = 2):
             with wave.open(str(path), 'rb') as audio:
                 if audio.getframerate() != audio_rate or audio.getnchannels() != audio_channels:
                     raise ValueError('Generated WAV sample rate/channels differ from source metadata')
-            w['audio'] = {'path': path.name, 'sha256': digest(path), 'sample_rate_hz': audio_rate, 'channels': audio_channels, 'source_audio_stream': 0}
+                samples = audio.getnframes()
+            sample_duration = samples / audio_rate
+            spans = source_coverage[i]
+            covered = sum(span['end_sec'] - span['start_sec'] for span in spans)
+            expected = w['end_sec'] - w['start_sec']
+            # Permit only sample-boundary / timestamp rounding; AAC padding is
+            # bounded by the source stream duration when it is known.
+            tolerance = max(audio_tolerance, 0.001)
+            if coverage_unknown:
+                coverage_status = 'unknown'
+            elif not samples and covered <= tolerance:
+                coverage_status = 'empty'
+            elif (abs(covered - expected) <= tolerance and abs(sample_duration - expected) <= tolerance
+                  and len(spans) == 1 and abs(spans[0]['start_sec'] - w['start_sec']) <= tolerance):
+                coverage_status = 'complete'
+            elif covered <= tolerance and samples:
+                coverage_status = 'unknown'
+            else:
+                coverage_status = 'partial'
+            w['audio'] = {'path': path.name, 'sha256': digest(path), 'sample_rate_hz': audio_rate,
+                          'channels': audio_channels, 'source_audio_stream': 0,
+                          'sample_count': samples, 'duration_sec': round(sample_duration, 6),
+                          'coverage_status': coverage_status, 'source_coverage_sec': spans,
+                          'coverage_tolerance_sec': round(tolerance, 6),
+                          'coverage_scope': 'Decoded source PTS intervals and WAV duration, not a proof of audible content or gap-free WAV alignment.'}
         else:
             w['audio'] = None
         w['review'] = {'visual': 'not_reviewed', 'audio': 'not_reviewed' if has_audio else 'no_audio_stream'}

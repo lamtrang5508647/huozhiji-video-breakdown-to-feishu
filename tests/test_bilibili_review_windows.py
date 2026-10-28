@@ -40,6 +40,9 @@ class WindowsTest(unittest.TestCase):
                     self.assertEqual(audio.getframerate(), w['audio']['sample_rate_hz'])
                     self.assertEqual(audio.getnchannels(), w['audio']['channels'])
                     self.assertGreater(audio.getnframes(), 43000)
+                    self.assertEqual(audio.getnframes(), w['audio']['sample_count'])
+                self.assertEqual(w['audio']['coverage_status'], 'complete')
+                self.assertAlmostEqual(w['audio']['duration_sec'], 1.0, places=3)
             self.assertIn('not continuous playback', result['scope'])
             self.assertEqual(json.loads((out / 'manifest.json').read_text(encoding='utf8')), result)
             with self.assertRaisesRegex(ValueError, 'Output exists'):
@@ -55,6 +58,38 @@ class WindowsTest(unittest.TestCase):
             r = mod.prepare(source, root / 'silent', 2, 2)
             self.assertIsNone(r['windows'][0]['audio'])
             self.assertEqual(r['windows'][0]['review']['audio'], 'no_audio_stream')
+
+    def test_short_audio_reports_complete_partial_and_empty_without_confusing_silence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); source = root / 'short.mkv'; audio_file = root / 'audio.wav'
+            # 1.4 seconds of silent PCM is present audio, not missing audio.
+            with wave.open(str(audio_file), 'wb') as wav:
+                wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(48000)
+                wav.writeframes(b'\x00\x00' * int(48000 * 1.4))
+            subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=80x60:rate=10:duration=3',
+                            '-i',str(audio_file),'-c:v','mpeg4','-c:a','pcm_s16le',str(source)], check=True, capture_output=True)
+            result = mod.prepare(source, root / 'out', 1, 2)
+            clips = [w['audio'] for w in result['windows']]
+            self.assertEqual([a['coverage_status'] for a in clips], ['complete', 'partial', 'empty'])
+            self.assertAlmostEqual(clips[0]['duration_sec'], 1.0, places=3)
+            self.assertAlmostEqual(clips[1]['duration_sec'], 0.4, places=3)
+            self.assertEqual(clips[2]['sample_count'], 0)
+            self.assertEqual(clips[2]['source_coverage_sec'], [])
+            self.assertEqual(result['windows'][2]['review']['audio'], 'not_reviewed')
+
+    def test_internal_timestamp_gap_is_not_reported_complete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); source = root / 'gap.mkv'
+            subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=80x60:rate=10:duration=2',
+                            '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=2',
+                            '-af',r'aselect=not(between(t\,0.4\,0.7))', '-c:v','mpeg4','-c:a','pcm_s16le',str(source)],
+                           check=True, capture_output=True)
+            result = mod.prepare(source, root / 'out', 1, 2)
+            first = result['windows'][0]['audio']
+            self.assertEqual(first['coverage_status'], 'partial')
+            self.assertEqual(len(first['source_coverage_sec']), 2)
+            self.assertLess(first['source_coverage_sec'][0]['end_sec'], first['source_coverage_sec'][1]['start_sec'])
+            self.assertEqual(result['windows'][1]['audio']['coverage_status'], 'complete')
 
     def test_nonzero_media_timestamps_are_rejected_before_output(self):
         with tempfile.TemporaryDirectory() as tmp:
