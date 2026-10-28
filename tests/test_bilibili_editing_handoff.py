@@ -73,6 +73,42 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual(csv_rows[0]['复刻步骤'], '底轨叠字')
         self.assertEqual(csv_rows[0]['音频核对状态'], 'not_reviewed')
 
+    def test_multiple_overlapping_events_show_source_and_row_intersections(self):
+        second = copy.deepcopy(self.events['events'][0])
+        second.update({'id': 'E2', 'start_ms': 950, 'end_ms': 1600,
+                       'observation': '字幕首行\n字幕次行', 'recreation': '字幕轨\n关键帧'})
+        boundary = copy.deepcopy(second)
+        boundary.update({'id': 'E3', 'start_ms': 0, 'end_ms': 1000,
+                         'observation': '只在第一行', 'recreation': '保留'})
+        self.events['events'].extend([second, boundary])
+        result = self.build()
+        doc, table = tool.render(result)
+        rows = list(csv.DictReader(io.StringIO(table)))
+        self.assertEqual(len(rows), 3)  # Existing script/shot row cardinality is unchanged.
+        self.assertEqual([len(row['events']) for row in result['rows']], [3, 2, 1])
+        first, second_row, third = [row['逐事件源时段与本行交集'].splitlines() for row in rows]
+        self.assertEqual(len(first), 3)
+        self.assertEqual(len(second_row), 2)
+        self.assertEqual(len(third), 1)
+        self.assertIn('事件 "E1"｜源事件 0.900–1.100 秒｜本行相交 0.900–1.000 秒（0.100 秒）', first[0])
+        self.assertIn('事件 "E1"｜源事件 0.900–1.100 秒｜本行相交 1.000–1.100 秒（0.100 秒）', second_row[0])
+        self.assertIn('事件 "E2"｜源事件 0.950–1.600 秒｜本行相交 0.950–1.000 秒（0.050 秒）', first[1])
+        self.assertIn('本行相交 1.000–1.500 秒（0.500 秒）', second_row[1])
+        self.assertIn('本行相交 1.500–1.600 秒（0.100 秒）', third[0])
+        self.assertIn('观察 "字幕首行\\n字幕次行"｜复刻 "字幕轨\\n关键帧"', first[1])
+        self.assertNotIn('E3', '\n'.join(second_row))  # Touching the boundary is not overlap.
+        self.assertEqual(rows[0]['画面观察'], '画面变化\n字幕首行\n字幕次行\n只在第一行')
+        self.assertEqual(rows[0]['复刻步骤'], '底轨叠字\n字幕轨\n关键帧\n保留')
+        self.assertEqual([x['id'] for x in json.loads(rows[0]['events'])], ['E1', 'E2', 'E3'])
+        self.assertIn('原视频源时间，不是新配音时间', doc)
+        self.assertIn('源事件 0.900–1.100 秒；本行相交 1.000–1.100 秒', doc)
+
+    def test_no_event_has_empty_readable_event_cell(self):
+        _, table = tool.render(self.build())
+        rows = list(csv.DictReader(io.StringIO(table)))
+        self.assertEqual(rows[2]['逐事件源时段与本行交集'], '')
+        self.assertEqual(rows[2]['画面观察'], '未提供，待审阅')
+
     def test_wrong_source_timeline_asset_and_foreign_video(self):
         self.source.write_bytes(b'wrong')
         with self.assertRaisesRegex(ValueError, 'Source file'): self.build()

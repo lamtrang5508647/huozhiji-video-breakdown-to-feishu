@@ -50,6 +50,26 @@ def md(value):
     return str(value).replace('\\', '\\\\').replace('|', '\\|').replace('\n', '<br>').replace('<', '&lt;').replace('>', '&gt;')
 
 
+def seconds(ms):
+    """Render integer source milliseconds without float-rounding surprises."""
+    return f'{ms // 1000}.{ms % 1000:03}'
+
+
+def event_intersection(event, row):
+    """Intersection of this event with the script/shot row, in source ms."""
+    return max(event['start_ms'], row['source_start_ms']), min(event['end_ms'], row['source_end_ms'])
+
+
+def readable_event(event, row):
+    left, right = event_intersection(event, row)
+    # Quoted text escapes embedded newlines, so one event is always one line
+    # even if a reviewer supplied multi-line observations or instructions.
+    quoted = lambda text: json.dumps(text, ensure_ascii=False)
+    return (f"事件 {quoted(event['id'])}｜源事件 {seconds(event['start_ms'])}–{seconds(event['end_ms'])} 秒"
+            f"｜本行相交 {seconds(left)}–{seconds(right)} 秒（{seconds(right-left)} 秒）"
+            f"｜观察 {quoted(event['observation'])}｜复刻 {quoted(event['recreation'])}")
+
+
 def asset_map_from_export(root, export_path):
     export_path = export_path.resolve(strict=True)
     require(export_path.is_relative_to(root), 'Export timeline must be inside handoff root')
@@ -173,7 +193,8 @@ def render(result):
                'segment_id', 'segment_name', 'shot_id', 'source_start_ms', 'source_end_ms',
                'source_shot_start_ms', 'source_shot_end_ms', 'source_text', 'source_text_status',
                'asset_path', 'asset_status', 'events', '源交集起始秒', '源交集结束秒', '源交集时长秒',
-               '源画面时长秒', '画面观察', '复刻步骤', '证据', '视觉核对状态', '音频核对状态']
+               '源画面时长秒', '画面观察', '复刻步骤', '证据', '视觉核对状态', '音频核对状态',
+               '逐事件源时段与本行交集']
     stream = io.StringIO(newline='')
     writer = csv.DictWriter(stream, fieldnames=columns)
     writer.writeheader()
@@ -187,12 +208,13 @@ def render(result):
                        '复刻步骤': '\n'.join(x['recreation'] for x in ev) or '未提供，待审阅',
                        '证据': '\n'.join(x['evidence'] for x in ev),
                        '视觉核对状态': '\n'.join(x['visual_status'] for x in ev) or '未审阅',
-                       '音频核对状态': '\n'.join(x['audio_status'] for x in ev) or str(result['audio_review_status'])})
+                       '音频核对状态': '\n'.join(x['audio_status'] for x in ev) or str(result['audio_review_status']),
+                       '逐事件源时段与本行交集': '\n'.join(readable_event(x, row) for x in ev)})
         writer.writerow({k: field(json.dumps(fields[k], ensure_ascii=False) if isinstance(fields[k], list) else fields[k]) for k in columns})
     lines = [f"# 剪辑师交接｜{md(result['video_id'])}", '',
              f"源视频 SHA-256：`{result['source_sha256']}`；时间线 SHA-256：`{result['timeline_sha256']}`。", '',
              f"语音校对状态：{md(result['audio_review_status'])}；转写状态：{md(result['transcript_status'])}。", '',
-             '每行是脚本段与源画面相交范围；素材是映射文件，标注为整段画面，非交集切片。素材文件哈希及声明的源区间已核对，但未对视频帧复验映射的真实性。字幕可能只是摘录，未必对应逐句口播。观察和复刻方案由审阅者提供，程序不验证语义或是否听校。', '']
+             '每行是脚本段与源画面相交范围；事件及其本行交集均为原视频源时间，不是新配音时间或精确口播对齐。素材是映射文件，标注为整段画面，非交集切片。素材文件哈希及声明的源区间已核对，但未对视频帧复验映射的真实性。字幕可能只是摘录，未必对应逐句口播。观察和复刻方案由审阅者提供，程序不验证语义或是否听校。', '']
     if result.get('input_hashes'):
         lines.extend(['输入 SHA-256：' + '；'.join(f'{md(k)} `{v}`' for k, v in result['input_hashes'].items()), ''])
     last = None
@@ -208,7 +230,8 @@ def render(result):
         if not row['events']:
             lines.extend(['剪辑观察和复刻步骤：未提供，待审阅。', ''])
         for event in row['events']:
-            lines.extend([f"事件 {md(event['id'])}（{event['start_ms']/1000:.3f}–{event['end_ms']/1000:.3f} 秒；画面 {md(event['visual_status'])}，音频 {md(event['audio_status'])}）",
+            left, right = event_intersection(event, row)
+            lines.extend([f"事件 {md(event['id'])}（源事件 {seconds(event['start_ms'])}–{seconds(event['end_ms'])} 秒；本行相交 {seconds(left)}–{seconds(right)} 秒；画面 {md(event['visual_status'])}，音频 {md(event['audio_status'])}）",
                           f"观察：{md(event['observation'])}；证据：{md(event['evidence'])}",
                           f"复刻步骤：{md(event['recreation'])}", ''])
     return '\n'.join(lines), stream.getvalue()
