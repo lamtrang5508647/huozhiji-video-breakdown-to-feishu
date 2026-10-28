@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import math
 from pathlib import Path
@@ -22,7 +23,7 @@ def load(path: Path):
     return json.loads(path.read_text(encoding='utf-8-sig'))
 
 
-def decoded_midpoints(source_path: Path, segments: list) -> dict:
+def decoded_midpoints(source_path: Path, segments: list, jpeg_hashes=None) -> dict:
     """Match extract_interval_evidence's nearest-frame rule from decoded source.
 
     The half-millisecond threshold and tie behavior match the exporter. Source
@@ -34,6 +35,19 @@ def decoded_midpoints(source_path: Path, segments: list) -> dict:
     result = {}
     cursor = 0
     previous = None
+    previous_frame = None
+    encoded = {}
+
+    def emit(sid, frame):
+        ms = float(frame.pts * frame.time_base) * 1000
+        result[sid] = ms
+        if jpeg_hashes is not None:
+            key = (frame.pts, str(frame.time_base))
+            if key not in encoded:
+                buf = io.BytesIO()
+                frame.to_image().save(buf, format='JPEG', quality=95)
+                encoded[key] = hashlib.sha256(buf.getvalue()).hexdigest()
+            jpeg_hashes[sid] = encoded[key]
     with av.open(str(source_path)) as container:
         if not container.streams.video:
             raise ValueError('Source has no video stream')
@@ -47,20 +61,22 @@ def decoded_midpoints(source_path: Path, segments: list) -> dict:
                 raise ValueError('Source presentation timestamps are invalid or unordered')
             while cursor < len(targets) and targets[cursor][0] <= ms + 0.500001:
                 target, sid = targets[cursor]
-                result[sid] = previous if previous is not None and abs(previous-target) < abs(ms-target) else ms
+                chosen = previous_frame if previous is not None and abs(previous-target) < abs(ms-target) else frame
+                emit(sid, chosen)
                 cursor += 1
             previous = ms
+            previous_frame = frame
             if cursor == len(targets):
                 break
     if previous is None:
         raise ValueError('Source has no timestamped video frames')
     while cursor < len(targets):
-        result[targets[cursor][1]] = previous
+        emit(targets[cursor][1], previous_frame)
         cursor += 1
     return result
 
 
-def verify(timeline_path: Path, evidence_path: Path, review_path: Path) -> dict:
+def verify(timeline_path: Path, evidence_path: Path, review_path: Path, *, strict_current_extractor: bool = False) -> dict:
     timeline_path = timeline_path.resolve(strict=True)
     evidence_path = evidence_path.resolve(strict=True)
     review_path = review_path.resolve(strict=True)
@@ -111,6 +127,9 @@ def verify(timeline_path: Path, evidence_path: Path, review_path: Path) -> dict:
           and all(isinstance(s, str) and s for s in ids) and len(rids) == len(set(rids)) and set(rids) == set(ids),
           'Review must contain each shot exactly once')
     expected_pts = {}
+    expected_jpegs = {} if strict_current_extractor else None
+    strict_checked = 0
+    strict_mismatches = 0
     if (isinstance(source, dict) and isinstance(source.get('path'), str) and isinstance(source.get('sha256'), str)
             and source_path.is_file() and sha(source_path).lower() == source['sha256'].lower()
             and len(ids) == len(segments) and len(set(ids)) == len(ids)
@@ -118,7 +137,7 @@ def verify(timeline_path: Path, evidence_path: Path, review_path: Path) -> dict:
                     and isinstance(s.get('end_ms'), int) and not isinstance(s.get('end_ms'), bool)
                     and 0 <= s['start_ms'] < s['end_ms'] for s in segments)):
         try:
-            expected_pts = decoded_midpoints(source_path, segments)
+            expected_pts = decoded_midpoints(source_path, segments, expected_jpegs)
         except (ImportError, OSError, ValueError, RuntimeError) as exc:
             errors.append('Could not verify decoded midpoint PTS: ' + str(exc))
     by_id = {x.get('shot_id'): x for x in records if isinstance(x, dict)}
@@ -137,6 +156,16 @@ def verify(timeline_path: Path, evidence_path: Path, review_path: Path) -> dict:
               label + ': description does not exactly match timeline')
         check(isinstance(middle, dict) and record.get('frame_sha256') == middle.get('sha256')
               and isinstance(middle.get('sha256'), str), label + ': midpoint frame hash mismatch')
+        if strict_current_extractor:
+            frame_name = middle.get('path') if isinstance(middle, dict) else None
+            frame_path = Path(frame_name) if isinstance(frame_name, str) and frame_name else None
+            if frame_path is not None and not frame_path.is_absolute():
+                frame_path = evidence_path.parent / frame_path
+            verified = (sid in expected_jpegs and frame_path is not None and frame_path.is_file()
+                        and sha(frame_path) == expected_jpegs[sid])
+            strict_checked += 1
+            strict_mismatches += int(not verified)
+            check(verified, label + ': current-extractor JPEG mismatch or unverified')
         actual = middle.get('actual_pts_ms') if isinstance(middle, dict) else None
         claimed = record.get('actual_pts_ms')
         check(type(actual) in (int, float) and math.isfinite(actual) and type(claimed) in (int, float)
@@ -157,10 +186,22 @@ def verify(timeline_path: Path, evidence_path: Path, review_path: Path) -> dict:
     if isinstance(source, dict) and isinstance(source.get('path'), str) and isinstance(source.get('sha256'), str):
         check(source_path.is_file() and sha(source_path).lower() == source['sha256'].lower(),
               'Source changed during validation')
-    return {'status': 'BLOCKED' if errors else 'PASS_STRUCTURE_ONLY', 'video_id': timeline.get('video_id'),
+    result = {'status': 'BLOCKED' if errors else 'PASS_STRUCTURE_ONLY', 'video_id': timeline.get('video_id'),
             'shots': len(segments), 'errors': errors, 'semantic_truth': 'not_assessed',
             'review_independence': 'declared_only', 'publication_ready': False,
             'scope': 'Human-declared midpoint observations, decoded midpoint timestamps and unchanged inputs only; does not prove image pixels match decoded frames, authenticate the reviewer, prove vision, establish description truth, whole-shot continuity, boundaries, subtitles, audio or publication readiness.'}
+    if strict_current_extractor:
+        result['current_extractor_jpeg_check'] = ('mismatch_or_unverified' if strict_mismatches else
+                                                   'matched' if strict_checked and strict_checked == len(segments) else
+                                                   'partial_or_unverified')
+        result['current_extractor_jpeg_checked'] = strict_checked
+        result['current_extractor_jpeg_total'] = len(segments)
+        result['frame_time_uniqueness'] = 'not_assessed'
+        result['scope'] = ('Midpoint JPEG bytes compared to the current decoder and JPEG95 encoder; '
+                           'a mismatch may be from a different encoder, not fabrication. Identical still '
+                           'frames can occur at different times. No proof of viewing, semantic truth, '
+                           'whole-shot continuity, audio or publication readiness.')
+    return result
 
 
 def main(argv=None):
@@ -168,11 +209,12 @@ def main(argv=None):
     for name in ('timeline', 'evidence-index', 'review'):
         parser.add_argument('--' + name, required=True, type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--strict-current-extractor', action='store_true', help='Require identical JPEG95 bytes from the current decoder/encoder; mismatches may be legitimate encoder differences')
     args = parser.parse_args(argv)
     try:
         if args.output and args.output.exists():
             raise ValueError('Output exists; choose a new path')
-        result = verify(args.timeline, args.evidence_index, args.review)
+        result = verify(args.timeline, args.evidence_index, args.review, strict_current_extractor=args.strict_current_extractor)
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             with args.output.open('x', encoding='utf-8') as target:

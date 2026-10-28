@@ -35,3 +35,9 @@ python scripts/validate_midpoint_content_review.py --timeline <候选时间线.j
 ```
 
 工具复用 `validate_interval_evidence.py` 检查原片关联、帧哈希、实际 PTS 与区间，并核对每镜、描述、身份声明和当前文件哈希；若待修、未决、漏镜、来源或内容变化，报告 `BLOCKED`。它不能鉴定审阅者身份、证明看过图或判断描述真假，结果明确为 `PASS_STRUCTURE_ONLY`，不等于完整镜头、语义、字幕、原音或发布批准。声明的独立审阅者须与作者不同；无法做到时应如实保留未完成，而不是伪装独立。需修稿时保留旧候选与差异，修订后重新提取/绑定与实际复核，不得沿用旧 hash 作为新稿审阅。
+
+### 同一提取器的可选 JPEG 对照
+
+如果中点证据使用 `extract_interval_evidence.py` 的 JPEG95 输出，可追加 `--strict-current-extractor`。工具以当前环境的 PyAV 解码对应帧，并用当前 Pillow/JPEG95 重新编码，要求字节 SHA-256 与证据 JPEG 一致。结果为 `matched` 仅说明**当前解码和编码规则下各镜字节一致**；缺少审核记录时为 `partial_or_unverified`，并报告已对照与应对照镜头数。静止或重复画面在不同 PTS 可以相同，不能据此证明帧唯一、审阅者实际看过或语义正确。模式会额外报告 `frame_time_uniqueness: not_assessed`。
+
+此模式需要当前环境的 PyAV 和 Pillow/JPEG 编码；同帧 PNG、其他 JPEG 质量、元数据或跨库版本编码可能不同。若不匹配，输出 `mismatch_or_unverified` 并阻断该严格模式，不应据此断言证据伪造：可用本机提取器在新目录重新取帧、人工核对并按新证据重新审核。未指定选项时维持原有兼容行为，原模式仍不能证明证据像素来自源帧。

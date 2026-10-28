@@ -70,6 +70,75 @@ class MidpointReviewTests(unittest.TestCase):
     def run_check(self):
         return module.verify(self.timeline, self.index, self.review)
 
+    def use_current_extractor_jpegs(self):
+        import av
+        selected = {}
+        with av.open(str(self.source)) as container:
+            for frame in container.decode(video=0):
+                ms = float(frame.pts * frame.time_base) * 1000
+                if ms in (250, 750):
+                    path = self.root / f'middle-{int(ms)}.jpg'
+                    frame.to_image().save(path, quality=95)
+                    selected[ms] = path
+        for shot_id, ms in [('s1', 250), ('s2', 750)]:
+            path = selected[ms]
+            self.index_data['shots'][shot_id]['middle'].update(path=path.name, sha256=sha(path))
+            next(x for x in self.review_data['shots'] if x['shot_id'] == shot_id)['frame_sha256'] = sha(path)
+        write(self.index, self.index_data)
+        self.review_data['evidence_sha256'] = sha(self.index)
+        write(self.review, self.review_data)
+        return selected
+
+    def test_strict_current_extractor_accepts_matching_and_repeated_still_frames(self):
+        selected = self.use_current_extractor_jpegs()
+        self.assertEqual(sha(selected[250]), sha(selected[750]))  # static video can legitimately repeat
+        result = module.verify(self.timeline, self.index, self.review, strict_current_extractor=True)
+        self.assertEqual(result['status'], 'PASS_STRUCTURE_ONLY', result)
+        self.assertEqual(result['current_extractor_jpeg_check'], 'matched')
+        self.assertEqual(result['frame_time_uniqueness'], 'not_assessed')
+        self.assertEqual(result['semantic_truth'], 'not_assessed')
+
+    def test_strict_current_extractor_blocks_blue_image_with_consistent_hash_and_pts(self):
+        from PIL import Image
+        self.use_current_extractor_jpegs()
+        blue = self.root / 'blue.jpg'
+        Image.new('RGB', (32, 32), (0, 0, 255)).save(blue, quality=95)
+        self.index_data['shots']['s1']['middle'].update(path=blue.name, sha256=sha(blue))
+        write(self.index, self.index_data)
+        self.review_data['evidence_sha256'] = sha(self.index)
+        self.review_data['shots'][0]['frame_sha256'] = sha(blue)
+        write(self.review, self.review_data)
+        self.assertEqual(self.run_check()['status'], 'PASS_STRUCTURE_ONLY')  # legacy mode is binding only
+        result = module.verify(self.timeline, self.index, self.review, strict_current_extractor=True)
+        self.assertEqual(result['status'], 'BLOCKED')
+        self.assertEqual(result['current_extractor_jpeg_check'], 'mismatch_or_unverified')
+        self.assertTrue(any('current-extractor JPEG mismatch or unverified' in e for e in result['errors']))
+
+    def test_strict_current_extractor_never_calls_encoder_mismatch_a_fake(self):
+        from PIL import Image
+        selected = self.use_current_extractor_jpegs()
+        alt = self.root / 'different-encoding.png'
+        Image.open(selected[250]).save(alt)
+        self.index_data['shots']['s1']['middle'].update(path=alt.name, sha256=sha(alt))
+        write(self.index, self.index_data)
+        self.review_data['evidence_sha256'] = sha(self.index)
+        self.review_data['shots'][0]['frame_sha256'] = sha(alt)
+        write(self.review, self.review_data)
+        result = module.verify(self.timeline, self.index, self.review, strict_current_extractor=True)
+        self.assertEqual(result['status'], 'BLOCKED')
+        self.assertEqual(result['current_extractor_jpeg_check'], 'mismatch_or_unverified')
+        self.assertNotIn('fake', json.dumps(result).lower())
+
+    def test_strict_partial_review_never_claims_every_jpeg_matched(self):
+        self.use_current_extractor_jpegs()
+        self.review_data['shots'].pop()
+        write(self.review, self.review_data)
+        result = module.verify(self.timeline, self.index, self.review, strict_current_extractor=True)
+        self.assertEqual(result['status'], 'BLOCKED')
+        self.assertEqual(result['current_extractor_jpeg_check'], 'partial_or_unverified')
+        self.assertEqual(result['current_extractor_jpeg_checked'], 1)
+        self.assertEqual(result['current_extractor_jpeg_total'], 2)
+
     def test_complete_record_is_structure_only_and_repeated_pixels_are_allowed(self):
         result = self.run_check()
         self.assertEqual(result['status'], 'PASS_STRUCTURE_ONLY', result)
@@ -167,7 +236,7 @@ class MidpointReviewTests(unittest.TestCase):
 
     def test_cli_does_not_overwrite_existing_receipt(self):
         output = self.root / 'receipt.json'; output.write_text('keep', encoding='utf-8')
-        code = module.main(['--timeline', str(self.timeline), '--evidence-index', str(self.index), '--review', str(self.review), '--output', str(output)])
+        code = module.main(['--timeline', str(self.timeline), '--evidence-index', str(self.index), '--review', str(self.review), '--strict-current-extractor', '--output', str(output)])
         self.assertEqual(code, 1)
         self.assertEqual(output.read_text(encoding='utf-8'), 'keep')
 
