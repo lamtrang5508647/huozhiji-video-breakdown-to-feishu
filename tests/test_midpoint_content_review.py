@@ -2,9 +2,12 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
+from fractions import Fraction
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / 'skill/analyze-folder-videos-to-feishu/scripts'
@@ -22,12 +25,16 @@ def write(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
 
+@unittest.skipUnless(shutil.which('ffmpeg'), 'ffmpeg required for actual source frame PTS')
 class MidpointReviewTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.source = self.root / 'source.mp4'
-        self.source.write_bytes(b'synthetic source identity only')
+        subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+                        'color=red:size=32x32:rate=20:duration=1', '-c:v', 'mpeg4', str(self.source)],
+                       check=True, capture_output=True)
+        self.source_bytes = self.source.read_bytes()
         self.frame = self.root / 'same-frame.ppm'
         self.frame.write_bytes(b'P6\n8 8\n255\n' + bytes([255, 0, 0]) * 64)
         self.timeline = self.root / 'timeline.json'
@@ -43,9 +50,9 @@ class MidpointReviewTests(unittest.TestCase):
                     'pts': ms, 'time_base': '1/1000', 'requested_ms': requested}
         self.index_data = {'video_id': 'fixture', 'source_sha256': sha(self.source),
                            'timeline_sha256': sha(self.timeline), 'shots': {
-                               's1': {'start': frame(0, 0), 'middle': frame(250, 250), 'end': frame(499, 500)},
-                               's2': {'start': frame(500, 500), 'middle': frame(750, 750), 'end': frame(999, 1000),
-                                      'cut_before': frame(499, 500), 'cut_after': frame(500, 500)}}}
+                               's1': {'start': frame(0, 0), 'middle': frame(250, 250), 'end': frame(450, 500)},
+                               's2': {'start': frame(500, 500), 'middle': frame(750, 750), 'end': frame(950, 1000),
+                                      'cut_before': frame(450, 500), 'cut_after': frame(500, 500)}}}
         write(self.index, self.index_data)
         self.review_data = {'schema': 'midpoint-content-review/v1', 'video_id': 'fixture',
                             'source_sha256': sha(self.source), 'timeline_sha256': sha(self.timeline),
@@ -112,7 +119,7 @@ class MidpointReviewTests(unittest.TestCase):
     def test_changing_source_timeline_or_evidence_invalidates_record(self):
         self.source.write_bytes(b'changed')
         self.assertEqual(self.run_check()['status'], 'BLOCKED')
-        self.source.write_bytes(b'synthetic source identity only')
+        self.source.write_bytes(self.source_bytes)
         self.timeline_data['segments'][0]['description'] = '已修改描述'; write(self.timeline, self.timeline_data)
         self.assertEqual(self.run_check()['status'], 'BLOCKED')
         write(self.timeline, json.loads(json.dumps(self.timeline_data, ensure_ascii=False).replace('已修改描述', '红色画面')))
@@ -126,6 +133,37 @@ class MidpointReviewTests(unittest.TestCase):
         result = self.run_check()
         self.assertEqual(result['status'], 'BLOCKED')
         self.assertTrue(any('not requested at this midpoint' in e for e in result['errors']))
+
+    def test_start_frame_falsely_claimed_as_midpoint_blocks(self):
+        middle = self.index_data['shots']['s1']['middle']
+        middle['actual_pts_ms'] = middle['pts'] = 0
+        write(self.index, self.index_data)
+        self.review_data['evidence_sha256'] = sha(self.index)
+        self.review_data['shots'][0]['actual_pts_ms'] = 0
+        write(self.review, self.review_data)
+        result = self.run_check()
+        self.assertEqual(result['status'], 'BLOCKED')
+        self.assertTrue(any('differs from decoded source selection' in e for e in result['errors']))
+
+    def test_sparse_vfr_uses_actual_nearest_and_tie_selects_later(self):
+        import av
+        import numpy as np
+        source = self.root / 'vfr.mp4'
+        with av.open(str(source), mode='w') as c:
+            stream = c.add_stream('mpeg4', rate=25)
+            stream.width, stream.height, stream.pix_fmt = 32, 32, 'yuv420p'
+            stream.time_base = Fraction(1, 1000)
+            for timestamp in (0, 200, 900, 1000):
+                frame = av.VideoFrame.from_ndarray(np.full((32, 32, 3), timestamp // 4, dtype=np.uint8), format='rgb24')
+                frame.pts, frame.time_base = timestamp, Fraction(1, 1000)
+                for packet in stream.encode(frame): c.mux(packet)
+            for packet in stream.encode(): c.mux(packet)
+        with av.open(str(source)) as c:
+            times = [float(f.pts * f.time_base) * 1000 for f in c.decode(video=0)]
+        self.assertEqual(times, [0, 200, 920, 1000])
+        result = module.decoded_midpoints(source, [{'id': 'near', 'start_ms': 0, 'end_ms': 1000},
+                                                   {'id': 'tie', 'start_ms': 0, 'end_ms': 1120}])
+        self.assertEqual(result, {'near': 200, 'tie': 920})
 
     def test_cli_does_not_overwrite_existing_receipt(self):
         output = self.root / 'receipt.json'; output.write_text('keep', encoding='utf-8')

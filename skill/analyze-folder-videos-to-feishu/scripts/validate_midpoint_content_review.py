@@ -22,6 +22,44 @@ def load(path: Path):
     return json.loads(path.read_text(encoding='utf-8-sig'))
 
 
+def decoded_midpoints(source_path: Path, segments: list) -> dict:
+    """Match extract_interval_evidence's nearest-frame rule from decoded source.
+
+    The half-millisecond threshold and tie behavior match the exporter. Source
+    is decoded once for all shots, including sparse or variable-rate frames.
+    This checks chosen timestamps, not whether a JPEG depicts that frame.
+    """
+    import av
+    targets = sorted(((s['start_ms'] + s['end_ms']) / 2, s['id']) for s in segments)
+    result = {}
+    cursor = 0
+    previous = None
+    with av.open(str(source_path)) as container:
+        if not container.streams.video:
+            raise ValueError('Source has no video stream')
+        for frame in container.decode(container.streams.video[0]):
+            if frame.pts is None:
+                continue
+            if frame.time_base is None:
+                raise ValueError('Decoded frame has no time base')
+            ms = float(frame.pts * frame.time_base) * 1000
+            if not math.isfinite(ms) or (previous is not None and ms < previous):
+                raise ValueError('Source presentation timestamps are invalid or unordered')
+            while cursor < len(targets) and targets[cursor][0] <= ms + 0.500001:
+                target, sid = targets[cursor]
+                result[sid] = previous if previous is not None and abs(previous-target) < abs(ms-target) else ms
+                cursor += 1
+            previous = ms
+            if cursor == len(targets):
+                break
+    if previous is None:
+        raise ValueError('Source has no timestamped video frames')
+    while cursor < len(targets):
+        result[targets[cursor][1]] = previous
+        cursor += 1
+    return result
+
+
 def verify(timeline_path: Path, evidence_path: Path, review_path: Path) -> dict:
     timeline_path = timeline_path.resolve(strict=True)
     evidence_path = evidence_path.resolve(strict=True)
@@ -72,6 +110,17 @@ def verify(timeline_path: Path, evidence_path: Path, review_path: Path) -> dict:
     check(len(rids) == len(records) and all(isinstance(s, str) and s for s in rids)
           and all(isinstance(s, str) and s for s in ids) and len(rids) == len(set(rids)) and set(rids) == set(ids),
           'Review must contain each shot exactly once')
+    expected_pts = {}
+    if (isinstance(source, dict) and isinstance(source.get('path'), str) and isinstance(source.get('sha256'), str)
+            and source_path.is_file() and sha(source_path).lower() == source['sha256'].lower()
+            and len(ids) == len(segments) and len(set(ids)) == len(ids)
+            and all(isinstance(s.get('start_ms'), int) and not isinstance(s.get('start_ms'), bool)
+                    and isinstance(s.get('end_ms'), int) and not isinstance(s.get('end_ms'), bool)
+                    and 0 <= s['start_ms'] < s['end_ms'] for s in segments)):
+        try:
+            expected_pts = decoded_midpoints(source_path, segments)
+        except (ImportError, OSError, ValueError, RuntimeError) as exc:
+            errors.append('Could not verify decoded midpoint PTS: ' + str(exc))
     by_id = {x.get('shot_id'): x for x in records if isinstance(x, dict)}
     frames = evidence.get('shots') if isinstance(evidence.get('shots'), dict) else {}
     for segment in segments:
@@ -92,6 +141,9 @@ def verify(timeline_path: Path, evidence_path: Path, review_path: Path) -> dict:
         claimed = record.get('actual_pts_ms')
         check(type(actual) in (int, float) and math.isfinite(actual) and type(claimed) in (int, float)
               and math.isfinite(claimed) and abs(actual - claimed) < 0.0001, label + ': midpoint PTS mismatch')
+        check(sid in expected_pts and type(actual) in (int, float) and math.isfinite(actual)
+              and abs(actual - expected_pts[sid]) < 0.01,
+              label + ': midpoint PTS differs from decoded source selection')
         start, end = segment.get('start_ms'), segment.get('end_ms')
         requested = middle.get('requested_ms') if isinstance(middle, dict) else None
         check(type(start) is int and type(end) is int and 0 <= start < end
@@ -108,7 +160,7 @@ def verify(timeline_path: Path, evidence_path: Path, review_path: Path) -> dict:
     return {'status': 'BLOCKED' if errors else 'PASS_STRUCTURE_ONLY', 'video_id': timeline.get('video_id'),
             'shots': len(segments), 'errors': errors, 'semantic_truth': 'not_assessed',
             'review_independence': 'declared_only', 'publication_ready': False,
-            'scope': 'Human-declared midpoint observations and unchanged inputs only; does not authenticate the reviewer, prove vision, establish description truth, whole-shot continuity, boundaries, subtitles, audio or publication readiness.'}
+            'scope': 'Human-declared midpoint observations, decoded midpoint timestamps and unchanged inputs only; does not prove image pixels match decoded frames, authenticate the reviewer, prove vision, establish description truth, whole-shot continuity, boundaries, subtitles, audio or publication readiness.'}
 
 
 def main(argv=None):
