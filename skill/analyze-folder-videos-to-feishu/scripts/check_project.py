@@ -25,6 +25,7 @@ def load_json(path: Path) -> Any:
         raise CheckError("project JSON missing or invalid") from None
 
 def project_path(root: Path, value: str) -> Path:
+    root = root.resolve()
     path = (root / value).resolve(); need(path.is_relative_to(root), "registry path escapes project root"); return path
 
 def validate(root: Path, out: Path) -> tuple[dict, dict, dict]:
@@ -223,6 +224,7 @@ def live(cli: str, root: Path, cfg: dict, details: dict) -> dict:
             "owner_checks_unconfigured": details["owner_checks_unconfigured"]}
 
 def protected_output(root: Path, out: Path, cfg: dict | None) -> bool:
+    root = root.resolve()
     target = out.resolve()
     if target == (root / "config" / "project.json").resolve(): return True
     if target.is_relative_to(root) and "state" in {part.lower() for part in target.relative_to(root).parts}: return True

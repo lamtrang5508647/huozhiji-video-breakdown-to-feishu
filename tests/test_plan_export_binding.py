@@ -75,6 +75,41 @@ class ExportBindingTests(unittest.TestCase):
         self.assertEqual(shots[0]['group_id'], 'G01')
         self.assertEqual(shots[0]['group_name'], 'Fixture group')
 
+    def test_equivalent_symlink_workspace_accepts_receipt_bound_files(self):
+        original_root = self.root
+        alias = original_root / 'workspace-alias'
+        try:
+            alias.symlink_to(original_root.resolve(), target_is_directory=True)
+        except OSError:
+            self.skipTest('Host does not permit directory symlink creation')
+        self.root = alias
+        result = self.run_bundle()
+        self.assertEqual(result['input_paths']['export_manifest'], 'semantic/export_manifest.json')
+        self.assertEqual(result['input_paths']['segment_index'], 'semantic/segments.csv')
+
+    def test_unbound_csv_with_identical_contents_is_rejected(self):
+        wrong_index = self.root / 'different-segments.csv'
+        wrong_index.write_bytes((self.root / 'semantic/segments.csv').read_bytes())
+        manifest = self.root / 'script_manifest.json'
+        export = self.root / 'semantic/export_manifest.json'
+        timeline = self.root / 'shots/timeline.json'
+        with self.assertRaisesRegex(builder.PlanError, 'receipt-bound exporter files'):
+            builder.validate_export_bundle(manifest, builder.read_json(manifest), export, builder.read_json(export),
+                   wrong_index, timeline, builder.read_json(timeline), self.root, self.root / 'review.json')
+
+    def test_symlinked_report_outside_workspace_is_rejected(self):
+        report = self.root / 'semantic/index.html'
+        with tempfile.TemporaryDirectory() as outside:
+            external = Path(outside) / 'index.html'
+            external.write_bytes(report.read_bytes())
+            report.unlink()
+            try:
+                report.symlink_to(external.resolve())
+            except OSError:
+                self.skipTest('Host does not permit file symlink creation')
+            with self.assertRaisesRegex(builder.PlanError, 'escapes'):
+                self.run_bundle()
+
     def test_unreviewed_and_not_reviewed_are_explicitly_rejected(self):
         manifest = builder.read_json(self.root / 'script_manifest.json')
         for status in ('unreviewed', 'not_reviewed', 'reviewed_but_rejected', 'review pending'):

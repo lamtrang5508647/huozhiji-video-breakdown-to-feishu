@@ -107,6 +107,35 @@ class ProjectCheckTests(unittest.TestCase):
         self.cfg['video_index_path'] = 'metadata/video-index.json'
         self.assertTrue(check.protected_output(self.root, self.root / 'metadata/video-index.json', self.cfg))
 
+    def project_alias(self):
+        alias = self.root / 'project-alias'
+        try:
+            alias.symlink_to(self.root.resolve(), target_is_directory=True)
+        except OSError:
+            self.skipTest('Host does not permit directory symlink creation')
+        return alias
+
+    def test_symlink_project_root_resolves_registry_to_same_file(self):
+        alias = self.project_alias()
+        expected = (self.root / self.cfg['registry_path']).resolve()
+        self.assertEqual(check.project_path(alias, self.cfg['registry_path']), expected)
+        self.assertEqual(check.validate(alias, alias / 'receipt.json')[2]['docs'], {})
+
+    def test_symlink_project_root_keeps_state_output_protected(self):
+        alias = self.project_alias()
+        self.assertTrue(check.protected_output(alias, alias / 'state/receipt.json', self.cfg))
+        self.assertTrue(check.protected_output(alias, self.root / 'state/receipt.json', self.cfg))
+        self.assertFalse(check.protected_output(alias, alias / 'receipt.json', self.cfg))
+
+    def test_symlink_project_root_still_rejects_escape(self):
+        alias = self.project_alias()
+        with tempfile.TemporaryDirectory() as outside:
+            link = self.root / 'outside'
+            link.symlink_to(Path(outside).resolve(), target_is_directory=True)
+            for value in ('../escape.json', str(Path(outside) / 'registry.json'), 'outside/registry.json'):
+                with self.subTest(value=value), self.assertRaisesRegex(check.CheckError, 'escapes'):
+                    check.project_path(alias, value)
+
 
 if __name__ == '__main__':
     unittest.main()

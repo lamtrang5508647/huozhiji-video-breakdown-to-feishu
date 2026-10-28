@@ -17,4 +17,10 @@ metadata:
 
 在仓库内可用 `python scripts/project.py acquire ...`。单独安装本 Skill 后，直接运行本目录下的 `scripts/acquire.py`；不依赖作者的私人路径、飞书账号或原项目状态。
 
+macOS 使用已核对的 Python 3.10+ 解释器绝对路径运行 `<本 Skill 目录>/scripts/acquire.py`；
+若已配置虚拟环境，持续使用其 `bin/python`，不要依赖另一个终端的激活状态。
+Node、FFmpeg、FFprobe 须在当前进程 PATH 中；Chrome 可显式传
+`--browser "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"`，其他安装位置按实传入。
+Playwright 安装在本 Skill 自己的 `vendor/video-batch-download` 下，详见运行条件。
+
 若自动路由为 `generic`，仅尝试调用用户已安装的 yt-dlp 的专用站点解析器。未知网页、直接媒体文件和通用解析结果无法建立真实平台身份时返回阻塞，不伪装成已支持的站点。

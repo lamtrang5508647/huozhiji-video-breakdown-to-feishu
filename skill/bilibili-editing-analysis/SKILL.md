@@ -5,6 +5,12 @@ description: 拆解 B站或其他参考视频的整体节奏、镜头、转场�
 
 # B站多维剪辑拆解
 
+macOS 调用本 Skill 的脚本时，解析实际 Skill 目录并用脚本绝对路径。
+媒体辅助程序需要 Python 3.10+、PyAV、Pillow、NumPy 与 FFmpeg/FFprobe；
+使用用户已配置虚拟环境的 `bin/python` 绝对路径，不依赖另一个终端的激活状态。
+例如用户选择 `~/.local/share/video-breakdown/venv` 时，先在实际主目录展开并核对；
+独立运行 `scripts/prepare_review_windows.py --help` 可确认入口，视听核准仍按下述流程。
+
 按原片实际样式分析，B站不代表固定节奏、手法或模板。用户要求借鉴 B站剪辑时调用本 Skill；不预设单一转场或把镜头检测当成分析。若原片来自链接，先通过 `video-link-extractor` 获取可解码且身份匹配的原片；已有原片复用并校对视频身份、哈希与时长。涉及脚本、逐画面素材和飞书归档，衔接 `analyze-folder-videos-to-feishu`；用户要实际剪辑时使用可用编辑工具，剪辑方案不等于已交付视频。
 
 ## 全片到可执行剪辑

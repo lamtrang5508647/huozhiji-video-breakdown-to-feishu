@@ -1,7 +1,7 @@
 # huozhiji · Video Breakdown to Feishu
 
 <!-- release-version:start -->
-当前版本 **v1.13.0** · 第 **019** 次正式版本迭代（2026-10-28）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
+当前版本 **v1.13.1** · 第 **020** 次正式版本迭代（2026-10-28）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
 <!-- release-version:end -->
 
 把带货视频拆成 **完整脚本框架 + 连续语义段 + 逐画面素材**，保留原文、时间线、
@@ -65,6 +65,9 @@ CSV/JSON、`chapter.xml` 和 `verification.json`。字幕直接绘制在合成�
 初始化和演示均要求新目录或空目录，避免覆盖既有工作。重复体验请选择新的输出目录。
 
 ## 安装 Skill
+
+macOS 的 Python 虚拟环境、FFmpeg、浏览器、全局安装和三个 Skill 的独立调用，
+按 [macOS 安装与调用](docs/macos.md) 操作。代码同时保留 Windows/Linux 调用方式。
 
 ```sh
 python scripts/project.py install-skill --dest "<你的skills目录>/analyze-folder-videos-to-feishu"

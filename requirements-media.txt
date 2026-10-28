@@ -1,3 +1,5 @@
 # Optional: precise presentation-timestamp frame evidence and its regression test.
 av
 Pillow
+# Used by PyAV image conversion and the synthetic variable-frame-rate regression.
+numpy

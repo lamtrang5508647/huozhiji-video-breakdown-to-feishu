@@ -214,6 +214,10 @@ def validate_export_bundle(manifest_path: Path, manifest: dict, export_path: Pat
                            index_path: Path, timeline_path: Path, timeline: dict,
                            workspace: Path, review_path: Path | None) -> dict:
     """Bind plan inputs to the exact reviewed inputs and completed exporter receipt."""
+    # macOS exposes equivalent roots such as /var and /private/var. Compare
+    # canonical paths while retaining the workspace escape and receipt checks.
+    manifest_path, export_path, index_path, timeline_path, workspace = (
+        path.resolve() for path in (manifest_path, export_path, index_path, timeline_path, workspace))
     status = manifest.get('review_status')
     if status is not None and status not in {'reviewed', 'content_reviewed', 'supervisor_reviewed'}:
         raise PlanError('Script manifest review_status is not an explicitly approved status')

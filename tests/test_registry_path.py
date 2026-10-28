@@ -26,8 +26,8 @@ class RegistryPathTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
 
     def test_default_and_custom_paths(self):
-        self.assertEqual(registry_path(self.root, {}), self.root / "state/platform-document-registry.json")
-        self.assertEqual(registry_path(self.root, {"registry_path": "custom/chapter-map.json"}), self.root / "custom/chapter-map.json")
+        self.assertEqual(registry_path(self.root, {}), (self.root / "state/platform-document-registry.json").resolve())
+        self.assertEqual(registry_path(self.root, {"registry_path": "custom/chapter-map.json"}), (self.root / "custom/chapter-map.json").resolve())
 
     def test_escape_empty_and_root_are_rejected(self):
         outside = self.root.parent / "outside.json"

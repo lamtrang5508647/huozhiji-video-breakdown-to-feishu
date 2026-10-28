@@ -24,6 +24,12 @@ HTML = ROOT / 'skill/bilibili-editing-analysis/assets/local-review.html'
 def chrome_path():
     choices = [os.environ.get('CHROME_PATH'), shutil.which('google-chrome'),
                shutil.which('chromium'), shutil.which('chromium-browser'),
+               '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+               '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+               '/Applications/Chromium.app/Contents/MacOS/Chromium',
+               *[str(Path.home() / 'Applications' / app / 'Contents/MacOS' / executable)
+                 for app, executable in (('Google Chrome.app', 'Google Chrome'),
+                                         ('Microsoft Edge.app', 'Microsoft Edge'), ('Chromium.app', 'Chromium'))],
                r'C:\Program Files\Google\Chrome\Application\chrome.exe',
                r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe']
     return next((str(Path(p)) for p in choices if p and Path(p).is_file()), None)

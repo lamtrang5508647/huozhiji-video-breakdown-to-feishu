@@ -33,6 +33,16 @@ Resolve the actual executables on the host. macOS may use `python3`; Windows may
 `python` or `py -3`. Optional dependencies are required only for the selected stage.
 Missing Feishu access does not prevent independent local analysis or rendering.
 
+On macOS, use a Python 3.10+ virtual environment for PyAV/Pillow/NumPy rather than
+installing into the system Python. A reusable user-selected location is
+`~/.local/share/video-breakdown/venv`: create it with `python3 -m venv <venv>`, then
+run `<venv>/bin/python -m pip install av Pillow numpy`. Resolve `~` on the actual
+host and use that interpreter's absolute path for every helper and child process;
+an activated shell is not inherited by a newly opened Agent application. If a
+different environment is already configured, reuse and verify it instead.
+FFmpeg and FFprobe must also be discoverable in the Agent process's PATH.
+The runtime directory and chosen interpreter remain local and are not bundled.
+
 `offline_asr.py` requires a non-empty local checkpoint or cache by default. Pass
 `--model <path>` or `--model-dir <cache-directory>`; named OpenAI Whisper downloads
 require the explicit `--allow-download` flag. It does not install an engine.
