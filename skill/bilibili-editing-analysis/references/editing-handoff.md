@@ -3,7 +3,7 @@
 已有按源片审核的 `script_manifest.json`、画面导出 `timeline.json`、原片、源时间线和编辑观察时，可在本机生成交接表。交接工具内含本仓库 `analyze-folder-videos-to-feishu/scripts/script_shot_alignment.py` 的交集实现快照，不依赖其他已安装 Skill 的版本。原片及业务记录留在本机；本功能不修改飞书。
 
 1. 以一个现有项目目录作为 `--root`。画面导出 `timeline.json`、对应 `clip_file` 均须在其下；新 Markdown/CSV 将生成在该目录顶层，文件名使用未占用的字母、数字、下划线或短横线。链接只写根目录内相对路径；换电脑需保持相对目录结构。
-2. `--manifest` 传入该片脚本清单，`--source` 传入原片文件，`--timeline` 传入脚本清单引用的原始时间线。原片和时间线文件的 SHA-256 必须分别与脚本清单中的来源值相符；`--export-timeline` 传入画面导出时的 timeline.json，它的画面 ID、区间、来源身份和每个片段哈希会核对。导出片段的实际画面与映射是否一致仍需人工核验。
+2. `--manifest` 传入该片脚本清单，`--source` 传入原片文件，`--timeline` 传入脚本清单引用的原始时间线。原片和时间线文件的 SHA-256 必须分别与脚本清单中的来源值相符；工具还会读取该时间线，核对视频身份、原片哈希，以及每个引用画面 ID 和完整起止区间，不能只靠文件哈希证明区间正确。`--export-timeline` 传入画面导出时的 timeline.json，它的画面 ID、区间、来源身份和每个片段哈希会核对。导出片段的实际画面与映射是否一致仍需人工核验。
 3. 用实际检查的材料建立单独 `events.json`，只记录有依据的事件；音频没听过写 `not_reviewed`，采样帧观察写 `observed_sampled`，逐帧观察写 `observed_frames`。事件可跨段，会关联每个相交画面；没有事件的行显示待审阅。事件描述、复刻方案和证据由审阅者提供，不是模型自动识别结果。
 
 ```json

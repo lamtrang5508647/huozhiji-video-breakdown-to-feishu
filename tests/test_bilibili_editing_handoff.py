@@ -32,11 +32,16 @@ class HandoffTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
         self.source = self.root / 'source.mp4'; self.source.write_bytes(b'source')
-        self.timeline = self.root / 'timeline.json'; self.timeline.write_bytes(b'timeline')
+        self.timeline = self.root / 'timeline.json'
         self.clip = self.root / '素材 clip.mp4'; self.clip.write_bytes(b'clip')
         self.sha = hashlib.sha256(b'source').hexdigest()
+        self.timeline_data = {'video_id': 'example', 'source': {'sha256': self.sha},
+                              'segments': [{'id': 'a', 'start_ms': 0, 'end_ms': 1500},
+                                           {'id': 'b', 'start_ms': 1500, 'end_ms': 3000}]}
+        self.timeline_bytes = json.dumps(self.timeline_data).encode('utf8')
+        self.timeline.write_bytes(self.timeline_bytes)
         self.manifest = {'video_id': 'example', 'duration_sec': 3, 'source': {'sha256': self.sha,
-                         'timeline_manifest_sha256': hashlib.sha256(b'timeline').hexdigest()},
+                         'timeline_manifest_sha256': hashlib.sha256(self.timeline_bytes).hexdigest()},
                          'segments': [segment('S1', 0, 1000, [shot('a', 0, 1500, 0, 1000)]),
                                       segment('S2', 1000, 3000, [shot('a', 0, 1500, 1000, 1500),
                                                                   shot('b', 1500, 3000, 1500, 3000)])]}
@@ -73,7 +78,7 @@ class HandoffTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Source file'): self.build()
         self.source.write_bytes(b'source'); self.timeline.write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError, 'Timeline'): self.build()
-        self.timeline.write_bytes(b'timeline'); self.clip.write_bytes(b'changed')
+        self.timeline.write_bytes(self.timeline_bytes); self.clip.write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError, 'Asset hash'): self.build()
         self.clip.write_bytes(b'clip'); bad = copy.deepcopy(self.events); bad['video_id'] = 'other'
         with self.assertRaisesRegex(ValueError, 'identity'): self.build(events=bad)
@@ -116,6 +121,35 @@ class HandoffTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'range'): self.build(assets=bad)
         bad = copy.deepcopy(self.manifest); bad['duration_sec'] = 2
         with self.assertRaisesRegex(ValueError, 'duration'): self.build(manifest=bad)
+
+    def test_cross_segment_forged_range_matches_assets_but_not_hashed_timeline(self):
+        bad = copy.deepcopy(self.manifest)
+        bad['segments'][0]['source_shot_spans'][0]['source_shot_end_ms'] = 1600
+        spans = bad['segments'][1]['source_shot_spans']
+        spans[0]['source_shot_end_ms'] = 1600
+        spans[0]['segment_intersection_end_ms'] = 1600
+        spans[1]['source_shot_start_ms'] = 1600
+        spans[1]['segment_intersection_start_ms'] = 1600
+        assets = copy.deepcopy(self.assets)
+        assets['assets'][0]['source_end_ms'] = 1600
+        with self.assertRaisesRegex(ValueError, 'interval differs from source timeline'):
+            self.build(manifest=bad, assets=assets)
+
+    def test_timeline_identity_source_and_missing_or_duplicate_shot_rejected(self):
+        variants = [
+            ({**self.timeline_data, 'video_id': 'another'}, 'identity'),
+            ({**self.timeline_data, 'source': {'sha256': 'a'*64}}, 'source hash'),
+            ({**self.timeline_data, 'segments': self.timeline_data['segments'][1:]}, 'missing'),
+            ({**self.timeline_data, 'segments': self.timeline_data['segments'] * 2}, 'Duplicate'),
+        ]
+        for data, message in variants:
+            with self.subTest(message=message):
+                raw = json.dumps(data).encode('utf8')
+                self.timeline.write_bytes(raw)
+                manifest = copy.deepcopy(self.manifest)
+                manifest['source']['timeline_manifest_sha256'] = hashlib.sha256(raw).hexdigest()
+                with self.assertRaisesRegex(ValueError, message):
+                    self.build(manifest=manifest)
 
     def test_standalone_install_without_companion_and_alignment_snapshot(self):
         original = ROOT / 'skill/analyze-folder-videos-to-feishu/scripts/script_shot_alignment.py'

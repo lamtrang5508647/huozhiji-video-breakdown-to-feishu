@@ -73,6 +73,32 @@ def asset_map_from_export(root, export_path):
             'source_sha256': export['source'].get('sha256'), 'assets': assets}
 
 
+def validate_source_timeline(timeline, video_id, source_sha256, rows):
+    """Compare every referenced full shot against the hashed source timeline."""
+    require(isinstance(timeline, dict), 'Timeline must be an object')
+    require(timeline.get('video_id') == video_id, 'Timeline video identity differs')
+    source = timeline.get('source')
+    require(isinstance(source, dict) and isinstance(source.get('sha256'), str)
+            and source['sha256'].lower() == source_sha256, 'Timeline source hash differs')
+    segments = timeline.get('segments')
+    require(isinstance(segments, list) and bool(segments), 'Timeline segments required')
+    indexed = {}
+    for shot in segments:
+        require(isinstance(shot, dict) and isinstance(shot.get('id'), str) and shot['id'].strip(),
+                'Timeline shot ID required')
+        sid = shot['id']
+        require(sid not in indexed, 'Duplicate timeline shot ID')
+        start, end = shot.get('start_ms'), shot.get('end_ms')
+        require(type(start) is int and type(end) is int and 0 <= start < end,
+                'Invalid timeline shot interval')
+        indexed[sid] = (start, end)
+    for row in rows:
+        sid = row['shot_id']
+        require(sid in indexed, 'Manifest shot is missing from source timeline')
+        require(indexed[sid] == (row['source_shot_start_ms'], row['source_shot_end_ms']),
+                'Manifest shot interval differs from source timeline')
+
+
 def build(root, manifest, source, timeline, assets, events):
     # Bundled snapshot of this repository's alignment module; no dependency on
     # another installed Skill's version or the caller's Python search path.
@@ -85,7 +111,10 @@ def build(root, manifest, source, timeline, assets, events):
     alignment = alignment_module.build_alignment(manifest)
     video_id, sha = alignment['video_id'], alignment['source_sha256'].lower()
     require(digest(source) == sha, 'Source file SHA-256 does not match manifest')
-    require(digest(timeline) == alignment['timeline_sha256'].lower(), 'Timeline SHA-256 does not match manifest')
+    timeline_bytes = timeline.read_bytes()
+    require(hashlib.sha256(timeline_bytes).hexdigest() == alignment['timeline_sha256'].lower(),
+            'Timeline SHA-256 does not match manifest')
+    validate_source_timeline(json.loads(timeline_bytes.decode('utf-8-sig')), video_id, sha, alignment['rows'])
     require(isinstance(assets, dict) and assets.get('schema') == 'editing-assets/v1', 'Invalid asset map')
     require(isinstance(events, dict) and events.get('schema') == 'editing-events/v1', 'Invalid editing events')
     for obj in (assets, events):
