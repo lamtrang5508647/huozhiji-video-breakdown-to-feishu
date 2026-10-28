@@ -1,7 +1,7 @@
 # huozhiji · Video Breakdown to Feishu
 
 <!-- release-version:start -->
-当前版本 **v1.7.1** · 第 **009** 次正式版本迭代（2026-10-28）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
+当前版本 **v1.8.0** · 第 **010** 次正式版本迭代（2026-10-28）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
 <!-- release-version:end -->
 
 把带货视频拆成 **完整脚本框架 + 连续语义段 + 逐画面素材**，保留原文、时间线、
@@ -22,6 +22,7 @@
 - **两种视频片段**：按脚本意思形成连续段，同时保留逐画面编号、切片与关键帧。
 - **脚本与镜头对齐**：按“脚本段 × 相交画面”并排查看原字幕、源时间、仿写槽和对应镜头组建议，点击定位视频；对齐表可导出 CSV/JSON，便于仿写和剪辑处理。时间粒度及用法见 [对齐说明](skill/analyze-folder-videos-to-feishu/references/script-shot-alignment.md)。
 - **B站剪辑分析 Skill**：按参考片实际内容分析整片节奏、剪接、字幕、音画、特效和包装，并提供带时间的剪辑复刻方案。不同视频的手法可不同；节奏计算基于人工确认镜头，分析并不等于完成剪辑或验证投放效果。见 [B站多维剪辑拆解](skill/bilibili-editing-analysis/SKILL.md)。
+- **分层剪辑手法参考**：按片中实际出现的多图对比、口播小窗、字幕强调、信息卡、图解和遮罩等选择复刻方式，区分所见、实施建议与待核参数，见 [分层手法](skill/bilibili-editing-analysis/references/layer-techniques.md)。
 - **视听审阅窗口**：将原片按窗口准备带时间戳的画面采样和原速音频，用于逐段定位和复核；见 [审阅清单](skill/bilibili-editing-analysis/references/review-windows.md)。生成材料不代表已连续观看或听校。
 - **逐帧与分轨**：可对重点区间提取带原始时间戳的原尺寸画面，按 [事件模板](skill/bilibili-editing-analysis/references/editing-events-template.md) 记录字幕、蒙版、叠层、剪点及复刻步骤；音轨窗口标注覆盖缺口，是否听校另行记录。
 - **本地逐段审片**：离线选择原片和审阅窗口，校验 SHA-256 后逐段播放、手动记录并导出。审阅者自己确认已看听，工具不判断语义；见 [审片说明](skill/bilibili-editing-analysis/references/review-windows.md)。
