@@ -1,7 +1,7 @@
 # huozhiji · Video Breakdown to Feishu
 
 <!-- release-version:start -->
-当前版本 **v1.11.0** · 第 **015** 次正式版本迭代（2026-10-28）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
+当前版本 **v1.12.0** · 第 **016** 次正式版本迭代（2026-10-28）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
 <!-- release-version:end -->
 
 把带货视频拆成 **完整脚本框架 + 连续语义段 + 逐画面素材**，保留原文、时间线、
@@ -37,6 +37,7 @@
 - **统一执行标准**：确定性排版、来源哈希、上下文复核、上传日志和实际保存结果校验。
   较小模型也要交同一套结构化产物，但不能据此承诺不同模型判断力相同。
 - **逐镜描述复核**：独立审阅者对照来源中点帧检查每镜描述，并记录当前素材及审核哈希；校验器只检查记录与证据绑定，不自动识别画面，也不取代边界、完整视频或音频复核。详见 [中点复核](skill/analyze-folder-videos-to-feishu/references/midpoint-content-review.md)。
+- **候选多帧审阅表**：把每镜起、中、末与切点前后证据组织成待审核的本地表，保留来源时间、字幕及标签原声明，便于逐条检查。详见 [审阅表说明](skill/analyze-folder-videos-to-feishu/references/candidate-review-sheet.md)。
 - **跨内容段关联检查**：保留画面的单一主归属，同时可核对画面与多个内容段的实际时间交集；旧数据未提供交集时明确提示。详见 [交集检查](skill/analyze-folder-videos-to-feishu/references/shot-group-intersection.md)。
 - **链接提取**：B站、抖音、小红书、快手的浏览器适配器，以及需要显式配置的视频号适配器；
   保留真实标题/文案、平台 ID、分享链接和解析后链接。完整媒体解码通过后才交给拆解。
