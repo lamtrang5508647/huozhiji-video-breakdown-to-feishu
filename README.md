@@ -1,7 +1,7 @@
 # huozhiji · Video Breakdown to Feishu
 
 <!-- release-version:start -->
-当前版本 **v1.9.0** · 第 **012** 次正式版本迭代（2026-10-28）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
+当前版本 **v1.10.0** · 第 **013** 次正式版本迭代（2026-10-28）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
 <!-- release-version:end -->
 
 把带货视频拆成 **完整脚本框架 + 连续语义段 + 逐画面素材**，保留原文、时间线、
@@ -36,6 +36,7 @@
   配合产品平台导航和视频附件画廊。
 - **统一执行标准**：确定性排版、来源哈希、上下文复核、上传日志和实际保存结果校验。
   较小模型也要交同一套结构化产物，但不能据此承诺不同模型判断力相同。
+- **逐镜描述复核**：独立审阅者对照来源中点帧检查每镜描述，并记录当前素材及审核哈希；校验器只检查记录与证据绑定，不自动识别画面，也不取代边界、完整视频或音频复核。详见 [中点复核](skill/analyze-folder-videos-to-feishu/references/midpoint-content-review.md)。
 - **链接提取**：B站、抖音、小红书、快手的浏览器适配器，以及需要显式配置的视频号适配器；
   保留真实标题/文案、平台 ID、分享链接和解析后链接。完整媒体解码通过后才交给拆解。
 
