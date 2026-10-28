@@ -17,6 +17,45 @@ spec.loader.exec_module(mod)
 
 @unittest.skipUnless(shutil.which('ffmpeg'), 'ffmpeg unavailable')
 class WindowsTest(unittest.TestCase):
+    def test_low_rate_fps_filter_labels_differ_from_actual_source_frame(self):
+        """A resampled zero timestamp can represent a later, different source frame."""
+        import av
+        from PIL import Image, ImageChops, ImageStat
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); source = root / 'moving.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+                            'testsrc2=size=160x90:rate=10:duration=4', '-c:v', 'ffv1', str(source)],
+                           check=True, capture_output=True)
+            old = subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'info', '-i', str(source),
+                                  '-vf', 'showinfo@before,fps=1/2:start_time=0,showinfo@after',
+                                  '-frames:v', '1', '-f', 'null', 'NUL' if __import__('os').name == 'nt' else '/dev/null'],
+                                 check=True, capture_output=True, text=True, encoding='utf8', errors='replace')
+            import re
+            before, after = {}, []
+            for line in old.stderr.splitlines():
+                match = re.search(r'pts_time:\s*([0-9.]+).*?checksum:([0-9A-F]+)', line)
+                if not match: continue
+                t, checksum = float(match.group(1)), match.group(2)
+                if 'showinfo@before' in line: before.setdefault(checksum, []).append(t)
+                if 'showinfo@after' in line: after.append((t, checksum))
+            self.assertEqual(len(after), 1)
+            self.assertEqual(after[0][0], 0.0)
+            source_times = before.get(after[0][1], [])
+            self.assertEqual(source_times, [0.9])
+
+            result = mod.prepare(source, root / 'review', 2, .5)
+            sample = result['windows'][0]['sample_times'][0]
+            self.assertEqual(sample['target_sec'], 0.0)
+            self.assertEqual(sample['actual_pts_sec'], 0.0)
+            # The saved contact sheet's first cell must show the declared frame,
+            # not merely attach the expected PTS to the fps-filtered picture.
+            with av.open(str(source)) as media:
+                images = {round(float(f.pts * f.time_base), 1): f.to_image().convert('RGB')
+                          for f in media.decode(video=0) if f.pts is not None}
+            cell = Image.open(root / 'review' / 'window-0001.jpg').convert('RGB').crop((0, 0, 160, 90))
+            mean_delta = lambda reference: sum(ImageStat.Stat(ImageChops.difference(cell, reference)).mean)
+            self.assertLess(mean_delta(images[0.0]), mean_delta(images[0.9]))
+
     def test_positive_video_offset_retains_pts_and_audio_zero_origin(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); source = root / 'video-delayed.mkv'

@@ -26,6 +26,8 @@ python scripts/prepare_batch.py <source-folder> --work-dir <job-dir>
 
 Add `--top-level-only` only when the user does not want subfolders. The script produces `batch_manifest.json`, one asset directory per video, opening frames, 10-second contact sheets, metadata, and a 16 kHz mono WAV when audio exists.
 
+Opening-frame filenames encode a **requested input seek**, not an actual decoded PTS; each contact sheet's filename gives its requested window, and its `fps=2` filter may select a later source frame than an apparent half-second grid position. The manifest records `visual_sampling_provenance.actual_source_pts` as `not_recorded`. Treat these assets as visual overviews only, and never infer exact source-frame times or cut boundaries from those labels or grid positions. For precise timing, decode from the hash-verified original and record each selected frame's native PTS and time base, using the available interval evidence tools; manually inspect the resulting source frames. This additional metadata is backward-compatible with existing path fields and does not retroactively validate older manifests.
+
 Read the manifest. Continue only with entries whose status is `prepared`. Preserve failed entries and their errors for the final report.
 
 ### 2. Build Transcript Evidence
@@ -44,7 +46,7 @@ For each prepared video, in manifest order:
 
 1. Inspect every opening frame from 0–5 seconds.
 2. Inspect every contact sheet in chronological order.
-3. Extract additional exact-timestamp frames with FFmpeg when text, products, prices, actions, or claims are unclear.
+3. Decode additional frames when text, products, prices, actions, or claims are unclear; record each selected frame's actual source PTS rather than assuming a requested seek produced an exact frame.
 4. Reconstruct the source script from spoken transcript first, synchronized subtitles second, and visible screen copy only when no reliable speech exists.
 5. Distinguish advertising claims from verified facts. Record risky claims in `不可照搬点`.
 6. Detect AI/simulation watermarks and disclose them; never treat simulated visuals as real product evidence.

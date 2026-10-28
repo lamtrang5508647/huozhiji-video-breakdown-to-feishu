@@ -207,6 +207,16 @@ def extract_video(
         "opening_frames": opening_paths,
         "contact_sheets": sheet_paths,
         "audio_wav": audio_path,
+        # These are overview assets, not frame-accurate evidence. FFmpeg's fps
+        # filter may select a source frame later than its output-grid timestamp.
+        # The existing path fields above remain unchanged for legacy callers.
+        "visual_sampling_provenance": {
+            "opening_filename_time": "requested_input_seek_time_not_source_pts",
+            "contact_sheet_sampling": "ffmpeg_fps_2_then_tile",
+            "contact_sheet_filename_time": "requested_window_bounds_not_each_source_pts",
+            "actual_source_pts": "not_recorded",
+            "scope": "Overview only; do not use filenames or grid positions as exact source-frame timestamps. Re-extract and record native PTS for precise claims.",
+        },
     }
 
 
