@@ -1,7 +1,7 @@
 # huozhiji · Video Breakdown to Feishu
 
 <!-- release-version:start -->
-当前版本 **v1.8.1** · 第 **011** 次正式版本迭代（2026-10-28）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
+当前版本 **v1.9.0** · 第 **012** 次正式版本迭代（2026-10-28）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
 <!-- release-version:end -->
 
 把带货视频拆成 **完整脚本框架 + 连续语义段 + 逐画面素材**，保留原文、时间线、
@@ -27,6 +27,7 @@
 - **逐帧与分轨**：可对重点区间提取带原始时间戳的原尺寸画面，按 [事件模板](skill/bilibili-editing-analysis/references/editing-events-template.md) 记录字幕、蒙版、叠层、剪点及复刻步骤；音轨窗口标注覆盖缺口，是否听校另行记录。
 - **本地逐段审片**：离线选择原片和审阅窗口，校验 SHA-256 后逐段播放、手动记录并导出。审阅者自己确认已看听，工具不判断语义；见 [审片说明](skill/bilibili-editing-analysis/references/review-windows.md)。
 - **剪辑师交接表**：将脚本段、相交画面素材和人工编辑事件按时间对应，输出可打开素材的 Markdown 与 CSV；校验来源与片段哈希，不把时间交集当作逐句音频时长。见 [交接说明](skill/bilibili-editing-analysis/references/editing-handoff.md)。
+- **内容段切口预检**：结合原片、候选时间线及机器转写时间，提示可能切断词句的边界，供实际听校；没有检测到重叠也不代表安全。见 [切口复核](skill/bilibili-editing-analysis/references/semantic-boundary-review.md)。
 - **原稿连续标色阅读**：新章节在 analysis 显式选择 `layout_profile: "source-reading/v9.2"`，以独立 H2 连续查看原文及颜色；来源状态独立展示。旧输入默认保留既有布局，原声未听校时不会当成已校对原稿。
 - **仿写整稿复核**：按 [故事逻辑复核](skill/analyze-folder-videos-to-feishu/references/story-logic-review.md) 逐版审查身份、关系、行动与经历归属；程序检查审核记录及稿件哈希，不能取代语义判断。完整仿写和分镜交付参见 [仿写交付规范](skill/analyze-folder-videos-to-feishu/references/imitation-authoring.md)。
 - **素材资产库**：关联源视频和脚本段，标注产品、平台、场景、用途；

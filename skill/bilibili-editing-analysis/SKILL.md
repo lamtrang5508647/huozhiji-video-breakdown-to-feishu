@@ -24,6 +24,8 @@ description: 拆解 B站或其他参考视频的整体节奏、镜头、转场�
 
 已有脚本清单、画面导出和人工剪辑事件时，按 [剪辑师交接](references/editing-handoff.md) 将脚本段、相交画面、素材链接和复刻观察组装为 Markdown 与 CSV。程序只验证结构和哈希，不能代替实际看听、确认片段内容或判断复刻质量。
 
+准备按语义段切片前，如有该原片绑定的带词或句时间的机器转写，可按 [语义切口预检](references/semantic-boundary-review.md) 检查候选边界与识别时间的重叠。它只指出可能截断，缺重叠不代表安全；实际语音与含义须听校，不能自动修改原时间线。
+
 交付前记录视频 ID、来源哈希、覆盖区间、检查方式、内容和手法证据时间点，明确未观看/未听校范围。跨案例提炼多种可选方法及适用条件，避免把某一案例习惯固化成统一模板；不能证明某手法带来爆款或真实投放结果。
 
 计算时，将人工核准且在覆盖区间内连续无间隙的镜头写入 JSON：`{"review_status":"reviewed","source_sha256":"实际原片SHA256","coverage_start_sec":0,"coverage_end_sec":5,"shots":[{"start_sec":0,"end_sec":2},{"start_sec":2,"end_sec":5}]}`。运行 `python scripts/pacing_metrics.py --input <已核准镜头.json> --output <新结果.json>`；分段计算分别提供各自的覆盖区间和镜头输入。脚本不看视频、不验证源文件哈希的真实性或人工核准的质量。
