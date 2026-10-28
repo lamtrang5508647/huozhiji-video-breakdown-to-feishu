@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ("analyze-folder-videos-to-feishu", "video-link-extractor")
+SKILLS = ("analyze-folder-videos-to-feishu", "video-link-extractor", "bilibili-editing-analysis")
 START = "<!-- release-version:start -->"
 END = "<!-- release-version:end -->"
 

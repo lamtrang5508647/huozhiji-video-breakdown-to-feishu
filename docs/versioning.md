@@ -21,6 +21,7 @@
 
 - `skill/analyze-folder-videos-to-feishu/VERSION.json`
 - `skill/video-link-extractor/VERSION.json`
+- `skill/bilibili-editing-analysis/VERSION.json`
 
 修改根版本时使用版本工具同步两份副本；不要手工只改一个 Skill。用户已安装的旧副本不会因仓库版本变化自动升级，应核对实际安装目录中的 `VERSION.json` 和文件校验结果。
 

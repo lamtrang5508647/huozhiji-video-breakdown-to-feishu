@@ -19,7 +19,7 @@ from versioning import read_release
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skill" / "analyze-folder-videos-to-feishu"
 ACQUIRE_SKILL = ROOT / "skill" / "video-link-extractor"
-SKILL_NAMES = ("analyze-folder-videos-to-feishu", "video-link-extractor")
+SKILL_NAMES = ("analyze-folder-videos-to-feishu", "video-link-extractor", "bilibili-editing-analysis")
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -169,7 +169,7 @@ def install_skill(args) -> dict:
     name = getattr(args, "skill", SKILL_NAMES[0])
     if name not in SKILL_NAMES:
         raise ValueError("Unknown bundled Skill: " + str(name))
-    source_root = SKILL if name == SKILL_NAMES[0] else ACQUIRE_SKILL
+    source_root = SKILL if name == SKILL_NAMES[0] else ACQUIRE_SKILL if name == SKILL_NAMES[1] else ROOT / "skill" / name
     destination = args.dest.expanduser().resolve()
     if destination.exists():
         raise ValueError(f"Destination already exists; compare or choose another path: {destination}")
