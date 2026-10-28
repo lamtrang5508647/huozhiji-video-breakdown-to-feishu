@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; media-src blob:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+<title>本地视频逐段审阅</title>
+<style>
+body{font:16px/1.5 system-ui,sans-serif;color:#1b2431;background:#f4f6fa;margin:0}main{max-width:1280px;margin:auto;padding:22px}h1{margin:0 0 8px;font-size:26px}header p{margin:5px 0;color:#505d70}.panel{background:white;border:1px solid #d8dfea;border-radius:10px;padding:16px;margin:12px 0}label{display:block;font-weight:600;margin:9px 0}input,select,textarea,button{font:inherit}input[type=file]{display:block;margin:5px 0;max-width:100%}button{background:#2b59d3;color:white;border:0;border-radius:6px;padding:8px 14px;cursor:pointer}button:disabled{background:#8995ac;cursor:not-allowed}video{background:#111;width:100%;max-height:65vh}table{border-collapse:collapse;width:100%;min-width:920px}th,td{padding:8px;border-bottom:1px solid #d8dfea;vertical-align:top;text-align:left}th{background:#f2f5fc}td select,td textarea{width:100%;box-sizing:border-box}td textarea{min-height:68px}.scroll{overflow-x:auto}.status{white-space:pre-wrap;overflow-wrap:anywhere}.bad{color:#aa2e28}.ok{color:#147344}.muted{color:#59687d}.seek{white-space:nowrap}.small{font-size:14px}footer{padding:12px 0;color:#59687d}
+</style></head><body><main>
+<header><h1>本地视频逐段审阅</h1><p>选择原片和窗口清单，核对哈希后逐段播放；手工记录看过、听过的范围。所有数据只在此浏览器页面处理。</p></header>
+<section class="panel"><label>1. 选择原视频<input id="videoFile" type="file" accept="video/*"></label>
+<label>2. 选择审阅窗口 JSON<input id="manifestFile" type="file" accept=".json,application/json"></label>
+<p class="muted small">支持本 Skill 生成的 bilibili-review-windows/v1，以及 bilibili-review-events/v1（events 中填写 start_sec、end_sec、title）。清单必须有 source_sha256；校验需浏览器允许本地 Web Crypto，原片最大 512 MiB。重复导入前请先导出，关闭页面后未导出的修改会丢失。</p>
+<p id="status" class="status" role="status">等待选择文件。</p><button id="download" disabled>导出审阅记录 JSON</button></section>
+<section class="panel"><video id="player" controls preload="metadata"></video><p id="playerStatus" class="muted">核对来源后可播放及跳转。</p></section>
+<section class="panel scroll"><table><thead><tr><th>区间 / 跳转</th><th>标题</th><th>画面审阅</th><th>声音审阅</th><th>观察、复刻步骤和未核项</th></tr></thead><tbody id="rows"></tbody></table></section>
+<footer>手动选择“听过”代表审阅者自行声明，程序不会替你听音或判定结论正确。不要把抽帧当作完整播放。</footer>
+<script>
+'use strict';
+const $=id=>document.getElementById(id), video=$('player'), rows=$('rows');
+let imported=null, media=null, objectUrl=null, actualHash=null, active=false, dirty=false, generation=0, sourceData=null;
+const visualValues=['not_reviewed','sampled','frame_by_frame','continuous_playback'];
+const audioValues=['not_reviewed','listened','no_audio_stream'];
+const visualLabels=['未审阅','仅抽样','逐帧查看','连续播放'];
+const audioLabels=['未听校','已听校','无音轨'];
+function status(message,ok){$('status').textContent=message;$('status').className='status '+(ok?'ok':'bad')}
+function pauseAndInvalidate(){generation++;active=false;actualHash=null;video.pause();video.removeAttribute('src');video.load();if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl=null}$('download').disabled=true;$('playerStatus').textContent='需先核对来源。';render()}
+function format(t){const m=Math.floor(t/60), s=t-m*60;return String(m).padStart(2,'0')+':'+s.toFixed(3).padStart(6,'0')}
+function optionSelect(values,labels,current,callback){const s=document.createElement('select');values.forEach((v,i)=>{const o=document.createElement('option');o.value=v;o.textContent=labels[i];s.append(o)});s.value=values.includes(current)?current:values[0];s.addEventListener('change',()=>{callback(s.value);dirty=true});return s}
+function cell(row){let t=document.createElement('td');row.append(t);return t}
+function render(){rows.replaceChildren();if(!sourceData)return;
+ sourceData.entries.forEach((entry,index)=>{let row=document.createElement('tr'),c=cell(row),b=document.createElement('button');b.type='button';b.className='seek';b.textContent=format(entry.start_sec)+' → '+format(entry.end_sec);b.disabled=!active;
+ b.onclick=()=>{if(!active)return;video.currentTime=entry.start_sec;video.play().catch(()=>{$('playerStatus').textContent='无法自动播放，请使用播放器播放键。'})};c.append(b);cell(row).textContent=entry.title;
+ cell(row).append(optionSelect(visualValues,visualLabels,entry.visual,v=>entry.visual=v));cell(row).append(optionSelect(audioValues,audioLabels,entry.audio,v=>entry.audio=v));
+ let area=document.createElement('textarea');area.value=entry.note;area.placeholder='记录观察依据、分层复刻步骤和未核项';area.addEventListener('input',()=>{entry.note=area.value;dirty=true});cell(row).append(area);rows.append(row)});
+}
+function parseManifest(obj){if(!obj||typeof obj!=='object'||!['bilibili-review-windows/v1','bilibili-review-events/v1','bilibili-manual-review/v1'].includes(obj.schema))throw Error('不支持的清单格式。');
+ if(typeof obj.source_sha256!=='string'||!/^[0-9a-f]{64}$/.test(obj.source_sha256))throw Error('清单缺少有效来源 SHA-256。');
+ let list=obj.schema==='bilibili-review-windows/v1'?obj.windows:obj.events;if(!Array.isArray(list)||!list.length||list.length>2000)throw Error('需要 1–2000 个窗口或事件。');
+ let entries=list.map((x,i)=>{if(!x||typeof x!=='object'||typeof x.start_sec!=='number'||!Number.isFinite(x.start_sec)||typeof x.end_sec!=='number'||!Number.isFinite(x.end_sec)||x.start_sec<0||x.end_sec<=x.start_sec)throw Error('第 '+(i+1)+' 行时间无效。');
+ let r=x.review&&typeof x.review==='object'?x.review:{};return {start_sec:x.start_sec,end_sec:x.end_sec,title:typeof x.title==='string'?x.title:'窗口 '+(i+1),visual:visualValues.includes(r.visual)?r.visual:'not_reviewed',audio:audioValues.includes(r.audio)?r.audio:'not_reviewed',note:typeof x.note==='string'?x.note:'',source_record:obj.schema==='bilibili-manual-review/v1'&&x.source_record?x.source_record:x}});
+ return {source_sha256:obj.source_sha256,original_input_schema:obj.original_input_schema||obj.schema,entries};}
+async function bind(){let id=++generation;active=false;$('download').disabled=true;if(!media||!sourceData){status('请选择原视频和审阅窗口 JSON。',false);return;}
+ if(!globalThis.crypto||!crypto.subtle){status('浏览器不能进行本地 SHA-256 校验，请使用支持本地 Web Crypto 的浏览器。',false);return;}
+ if(media.size>512*1024*1024){status('原片超过 512 MiB，本页面不读取；请选择较小原片或使用其他本地审阅工具。',false);return;}
+ try{status('正在本地核对原片 SHA-256，请稍候。',true);let bytes=await media.arrayBuffer();let digest=await crypto.subtle.digest('SHA-256',bytes);if(id!==generation)return;
+ actualHash=Array.from(new Uint8Array(digest),x=>x.toString(16).padStart(2,'0')).join('');if(actualHash!==sourceData.source_sha256)throw Error('原片 SHA-256 与清单不一致，已禁止播放与导出。');
+ if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=URL.createObjectURL(media);video.src=objectUrl;video.load();status('来源 SHA-256 一致，等待播放器读取时长。',true);
+ }catch(e){if(id!==generation)return;active=false;render();status(String(e.message||e),false)}}
+video.addEventListener('loadedmetadata',()=>{if(!actualHash||!sourceData||actualHash!==sourceData.source_sha256)return;
+ if(!Number.isFinite(video.duration)||sourceData.entries.some(x=>x.end_sec>video.duration+0.05)){active=false;render();status('事件范围超出视频时长或播放器无法读取时长。',false);return;}
+ active=true;$('download').disabled=false;$('playerStatus').textContent='来源一致；点击时间跳转。请按实际观看和听校情况填写。';render();status('来源 SHA-256 已核对，时长 '+video.duration.toFixed(3)+' 秒。',true)});
+video.addEventListener('error',()=>{active=false;$('download').disabled=true;render();status('浏览器无法播放该视频格式，请选择可播放的相同原片或使用其他本地播放器。',false)});
+$('videoFile').addEventListener('change',async e=>{if(dirty&&!confirm('未导出的审核修改将保留在页面中，但切换原片后需要重新核对来源。继续吗？')){e.target.value='';return;}pauseAndInvalidate();media=e.target.files[0]||null;await bind()});
+$('manifestFile').addEventListener('change',async e=>{if(dirty&&!confirm('导入新清单将替换未导出的修改。继续吗？')){e.target.value='';return;}pauseAndInvalidate();const id=generation;try{const f=e.target.files[0];if(!f)throw Error('未选择清单。');if(f.size>5*1024*1024)throw Error('清单超过 5 MiB。');const raw=JSON.parse(await f.text());if(id!==generation)return;imported=parseManifest(raw);sourceData=imported;dirty=false;render();await bind()}catch(err){if(id!==generation)return;sourceData=null;render();status(String(err.message||err),false)}});
+$('download').onclick=()=>{if(!active||!sourceData)return;const out={schema:'bilibili-manual-review/v1',source_sha256:sourceData.source_sha256,source_filename:media.name,video_duration_sec:video.duration,exported_at:new Date().toISOString(),original_input_schema:sourceData.original_input_schema,scope:'Manual declarations by reviewer; this tool does not prove playback, listening, source truth or semantic correctness.',events:sourceData.entries.map(e=>({start_sec:e.start_sec,end_sec:e.end_sec,title:e.title,review:{visual:e.visual,audio:e.audio},note:e.note,source_record:e.source_record}))};
+ const url=URL.createObjectURL(new Blob([JSON.stringify(out,null,2)+'\n'],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='manual-review.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);dirty=false;};
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
+</script></main></body></html>
