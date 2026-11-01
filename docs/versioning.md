@@ -22,8 +22,11 @@
 - `skill/analyze-folder-videos-to-feishu/VERSION.json`
 - `skill/video-link-extractor/VERSION.json`
 - `skill/bilibili-editing-analysis/VERSION.json`
+- `skill/short-video-replication/VERSION.json`
 
-修改根版本时使用版本工具同步两份副本；不要手工只改一个 Skill。用户已安装的旧副本不会因仓库版本变化自动升级，应核对实际安装目录中的 `VERSION.json` 和文件校验结果。
+`scripts/versioning.py` 的 `SKILLS` 清单同时供安装器和版本工具使用。新增技能时在此登记，确保安装选项、版本同步与校验一致。
+
+修改根版本时使用版本工具同步所有副本；不要手工只改一个 Skill。用户已安装的旧副本不会因仓库版本变化自动升级，应核对实际安装目录中的 `VERSION.json` 和文件校验结果。
 
 ## 查看与校验
 
@@ -36,7 +39,7 @@ python scripts/versioning.py check
 python scripts/versioning.py check --tag v1.0.0
 ```
 
-`check` 用于检查本地版本源、两个 Skill 副本、README 和更新日志的一致性。`--tag` 用于核对拟使用的发布标签与版本是否一致，标签形式为 `v<version>`；它不替代远端提交、标签和安装内容的回读。
+`check` 用于检查本地版本源、全部 Skill 副本、README 和更新日志的一致性。`--tag` 用于核对拟使用的发布标签与版本是否一致，标签形式为 `v<version>`；它不替代远端提交、标签和安装内容的回读。
 
 更新日志位于 [CHANGELOG.md](../CHANGELOG.md)。文件首行为 `# 更新日志`，每个正式版本使用以下标题格式，迭代号至少补齐三位：
 
@@ -69,7 +72,7 @@ python scripts/versioning.py check
 
 ## 交付检查
 
-版本准备后，先审阅变更与更新日志，运行 `python scripts/run_checks.py`；修改视频或帧导出时运行 `python scripts/run_checks.py --media`。确认两个 Skill 的新安装副本包含一致版本元数据，按安装器结果核对文件，再检查拟使用的标签。
+版本准备后，先审阅变更与更新日志，运行 `python scripts/run_checks.py`；修改视频或帧导出时运行 `python scripts/run_checks.py --media`。确认全部 Skill 的新安装副本包含一致版本元数据，按安装器结果核对文件，再检查拟使用的标签。
 
 将实际通过、跳过和未验证范围记入 [验证记录](verification.md)。本地检查、合成媒体和安装验收分别说明其覆盖范围；不将它们改称真实来源已听校、飞书交付成功、AI 生成相似或广告效果已验证。
 

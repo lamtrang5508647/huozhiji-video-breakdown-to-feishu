@@ -1,13 +1,15 @@
 # macOS 安装与调用
 
 支持 Intel 和 Apple Silicon Mac；需要 Python 3.10+。以下命令在仓库根目录、
-macOS 自带 zsh 中执行。安装依赖后，三个 Skill 可以全局调用；项目、媒体、
+macOS 自带 zsh 中执行。安装依赖后，四个 Skill 可以全局调用；项目、媒体、
 凭证和虚拟环境始终留在当前电脑，不随仓库分发。
 
 ## 1. 准备本机运行时
 
 先核对 `python3 --version`、`ffmpeg -version`、`ffprobe -version` 和 `node --version`。
 链接提取需 Node.js 20+，同时需要可选 PNG 预览时选择 Node.js 22+。
+只使用复刻 Skill 的分析和提示词说明不需要安装这些媒体依赖；生成和合成时再检查
+所选服务与剪辑工具的运行条件。
 如已使用 Homebrew，可安装或补齐缺少的命令：
 
 ```sh
@@ -38,7 +40,7 @@ Playwright 使用上面明确选择的现有浏览器，不需自动下载另一
 若桌面 Agent 无法发现 Homebrew 命令，先核对它的 PATH；Apple Silicon 常见目录
 为 `/opt/homebrew/bin`，Intel 常见为 `/usr/local/bin`，应以实际安装为准。
 
-## 2. 全局安装三个 Skill
+## 2. 全局安装四个 Skill
 
 默认 Codex 安装目录如下。其他 Agent 可改为其实际 skills 目录。
 
@@ -47,11 +49,13 @@ VIDEO_SKILLS="$HOME/.codex/skills"
 "$VIDEO_PYTHON" scripts/project.py install-skill --dest "$VIDEO_SKILLS/analyze-folder-videos-to-feishu"
 "$VIDEO_PYTHON" scripts/project.py install-skill --skill video-link-extractor --dest "$VIDEO_SKILLS/video-link-extractor"
 "$VIDEO_PYTHON" scripts/project.py install-skill --skill bilibili-editing-analysis --dest "$VIDEO_SKILLS/bilibili-editing-analysis"
+"$VIDEO_PYTHON" scripts/project.py install-skill --skill short-video-replication --dest "$VIDEO_SKILLS/short-video-replication"
 npm ci --ignore-scripts --prefix "$VIDEO_SKILLS/video-link-extractor/vendor/video-batch-download"
 ```
 
-安装器逐文件校验并拒绝覆盖已有目录。升级前先比较现有安装、另存备份或安装到新目录，
-不要直接覆盖本机修改。每个安装副本的 `VERSION.json` 应与根版本一致。
+按任务选装，不必安装全部。安装器逐文件校验并拒绝覆盖已有目录。升级先安装到新目录，
+比较并保留本机专用配置和自定义内容，再备份旧目录并切换；备份放在 skills 目录之外，
+避免旧版重复被加载。每个安装副本的 `VERSION.json` 应与根版本一致，本地定制单独记录。
 仓库和全局副本各有自己的 npm 依赖目录；安装器不会把本机 `node_modules` 打包复制。
 
 重新打开对话以加载新 Skill。告诉执行者选定的 Python **绝对路径**和 Skill 目录；
@@ -72,7 +76,7 @@ open outputs/mac-demo/analysis.html
 初始化、示例及工作输出均使用新的空目录。`--media` 增加真实 PTS 解码回归；
 检查回执里的失败与跳过，不能把缺依赖导致的跳过当作通过。
 
-全局安装的三个入口可脱离仓库直接核对：
+前三个技能的程序入口可脱离仓库直接核对：
 
 ```sh
 "$VIDEO_PYTHON" "$VIDEO_SKILLS/analyze-folder-videos-to-feishu/scripts/check_project.py" --help
@@ -80,11 +84,18 @@ open outputs/mac-demo/analysis.html
 "$VIDEO_PYTHON" "$VIDEO_SKILLS/bilibili-editing-analysis/scripts/prepare_review_windows.py" --help
 ```
 
+`short-video-replication` 是指令型 Skill，没有伪装成视频生成器的本地命令。
+检查 `$VIDEO_SKILLS/short-video-replication/SKILL.md`、`VERSION.json` 及其引用文件，
+在新对话中使用 `$short-video-replication` 即可调用；模型账号和额度需已有连接。
+
 交给 Codex 的示例指令：
 
 > 使用 video-link-extractor 提取我给定的视频链接；使用已配置虚拟环境的 Python，
 > 原片通过完整解码后，再使用 analyze-folder-videos-to-feishu 做脚本和镜头拆解。
 > 如需研究剪辑手法，使用 bilibili-editing-analysis；项目目录、产品和平台以本次提供为准。
+
+> 使用 short-video-replication 接续已有拆解，按本次要求准备分镜、人物和声音参考，
+> 使用我选定的平台生成并剪辑；仅要提示词时停在规划阶段。
 
 如需手动探测链接，先创建仓库外的新工作目录，再运行独立入口：
 

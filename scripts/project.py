@@ -14,12 +14,11 @@ import sys
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from versioning import read_release
+from versioning import SKILLS as SKILL_NAMES, read_release
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skill" / "analyze-folder-videos-to-feishu"
 ACQUIRE_SKILL = ROOT / "skill" / "video-link-extractor"
-SKILL_NAMES = ("analyze-folder-videos-to-feishu", "video-link-extractor", "bilibili-editing-analysis")
 
 
 def write_json(path: Path, data: dict) -> None:

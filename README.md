@@ -1,7 +1,7 @@
 # huozhiji · Video Breakdown to Feishu
 
 <!-- release-version:start -->
-当前版本 **v1.13.1** · 第 **020** 次正式版本迭代（2026-10-28）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
+当前版本 **v1.14.0** · 第 **021** 次正式版本迭代（2026-11-01）。[更新日志](CHANGELOG.md) · [版本说明](docs/versioning.md) · [下载与历史版本](https://github.com/lamtrang5508647/huozhiji-video-breakdown-to-feishu/releases)
 <!-- release-version:end -->
 
 把带货视频拆成 **完整脚本框架 + 连续语义段 + 逐画面素材**，保留原文、时间线、
@@ -9,7 +9,22 @@
 
 这是可安装的 Agent Skill 与一组校验、渲染、切片和同步工具。原片理解和内容复核
 由执行者完成；它不是自动保证语义正确的模型，也没有内置 AI 视频生成服务。
-新增 `video-link-extractor`，负责链接提取和原片准备，再衔接拆解。
+`video-link-extractor` 负责链接提取和原片准备；`short-video-replication` 将已有拆解
+接入用户选择的模型或画布，再组织声音、剪辑和成片验收。生成需要另行连接实际服务。
+
+## 按任务选择 Skill
+
+| 你要做什么 | 使用哪个 Skill | 交付 |
+| --- | --- | --- |
+| 从分享链接取得原片 | [video-link-extractor](skill/video-link-extractor/SKILL.md) | 来源身份、可用媒体、解码与哈希回执 |
+| 理解脚本、拆段拆镜、归档飞书 | [analyze-folder-videos-to-feishu](skill/analyze-folder-videos-to-feishu/SKILL.md) | 原文、语义段、镜头及对应素材 |
+| 研究剪辑、字幕、运镜和音画节奏 | [bilibili-editing-analysis](skill/bilibili-editing-analysis/SKILL.md) | 时间证据、编辑事件与剪辑交接 |
+| 复刻带货、探店或采访成片 | [short-video-replication](skill/short-video-replication/SKILL.md) | 逐镜动态提示词、生成任务、声音路线与成片验收 |
+
+只加载当前任务需要的技能。已有可信原片或拆解时直接复用，保留源文件哈希、
+镜头/脚本段身份及未复核项。仅要分析时停在分析；仅要提示词时不提交付费生成。
+复刻可以使用 LibTV，也可以通过已连接的模型生成后在可用剪辑工具中合成；
+具体平台、配音复用方式、台词与时长以本次要求为准。
 
 ## 你会得到什么
 
@@ -66,13 +81,14 @@ CSV/JSON、`chapter.xml` 和 `verification.json`。字幕直接绘制在合成�
 
 ## 安装 Skill
 
-macOS 的 Python 虚拟环境、FFmpeg、浏览器、全局安装和三个 Skill 的独立调用，
+macOS 的 Python 虚拟环境、FFmpeg、浏览器、全局安装和四个 Skill 的独立调用，
 按 [macOS 安装与调用](docs/macos.md) 操作。代码同时保留 Windows/Linux 调用方式。
 
 ```sh
 python scripts/project.py install-skill --dest "<你的skills目录>/analyze-folder-videos-to-feishu"
 python scripts/project.py install-skill --skill video-link-extractor --dest "<你的skills目录>/video-link-extractor"
 python scripts/project.py install-skill --skill bilibili-editing-analysis --dest "<你的skills目录>/bilibili-editing-analysis"
+python scripts/project.py install-skill --skill short-video-replication --dest "<你的skills目录>/short-video-replication"
 ```
 
 目标是准确的 Skill 目录，例如所用 Agent 的 `~/.codex/skills/analyze-folder-videos-to-feishu`。
@@ -90,6 +106,15 @@ python scripts/project.py install-skill --skill bilibili-editing-analysis --dest
 由拆解 Skill 负责，链接提取 Skill 只负责准备源视频。
 
 要同步飞书，再给出明确的项目配置和目标。不要把另一个项目的表格或账号当默认值。
+
+要复刻成片，可以直接说：
+
+> 使用 short-video-replication 复刻这条参考视频。复用已有拆解和我认可的试镜，
+> 先整理逐镜提示词、人物/场景/声音参考和实际时长。沿用我选定的平台与声音路线，
+> 在本次授权范围内生成并合成，交付可播放文件和未通过的检查项。
+
+只安装复刻 Skill 即可使用其规划方法；它不自带模型账号、额度、TTS、口型模型或
+剪辑运行时，也不要求先上传飞书。具体分镜与任务记录见技能内的引用模板。
 
 ## 从视频链接开始
 
@@ -140,6 +165,7 @@ python skill/analyze-folder-videos-to-feishu/scripts/check_project.py --project 
 | 可选 PNG 预览 | Node.js 22+、Chrome/Edge/Chromium |
 | 可选 ASR 草稿 | 自行安装的 Whisper / whisper.cpp 与本地模型 |
 | 飞书读写 | 已认证的 lark-cli 与实际权限 |
+| AI 复刻生成与合成 | 已连接且满足输入条件的模型服务，以及所选画布/剪辑工具；按当前能力和计费执行 |
 
 ```sh
 python scripts/run_checks.py
@@ -155,6 +181,8 @@ python scripts/run_checks.py --media --output outputs/checks.json
 ```text
 skill/analyze-folder-videos-to-feishu/  可安装 Skill 与底层程序
 skill/video-link-extractor/            链接提取 Skill、裁剪适配器与许可说明
+skill/bilibili-editing-analysis/       剪辑手法分析、证据审阅和交接工具
+skill/short-video-replication/         短视频复刻、动态提示词、声音路线与成片验收
 scripts/                              新用户入口与统一测试入口
 examples/                             占位配置、原创合成样例
 tests/                                可移植回归测试

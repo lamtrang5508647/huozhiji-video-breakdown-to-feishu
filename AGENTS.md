@@ -35,7 +35,7 @@ separate workspace created with `scripts/project.py init`.
 # Release versions
 
 - Read `docs/versioning.md` before preparing a formal version. Root `VERSION.json`
-  is the sole version source; both Skill `VERSION.json` copies must match it.
+  is the sole version source; all bundled Skill `VERSION.json` copies must match it.
 - Start formal versioning at `v1.0.0`, iteration `1`, dated `2026-10-10`.
   Earlier history was unversioned; never invent retrospective release numbers.
 - Use `python scripts/versioning.py bump --part patch|minor|major --date YYYY-MM-DD --notes-file PATH`
@@ -46,7 +46,7 @@ separate workspace created with `scripts/project.py init`.
   changes, compatibility and verification boundaries; do not invent test totals.
 - Run `python scripts/versioning.py check` and check the intended `v<version>` tag
   with `--tag` before release. Run the required regression/media checks and verify
-  both installed Skill versions and file contents. Reuse current-task authorization
+  all installed Skill versions and file contents. Reuse current-task authorization
   for any remote release step; verify the remote commit and version before claiming
   publication. Local version preparation alone is not a published release.
 - Component engine versions and output hashes remain separate from the repository

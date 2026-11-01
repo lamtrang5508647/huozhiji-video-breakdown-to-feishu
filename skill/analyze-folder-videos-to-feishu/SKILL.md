@@ -33,6 +33,8 @@ Process videos one at a time from the user's explicit source and target. Keep an
 
 **仿写交付前逐版整稿复核。** 按 [仿写交付规范](references/imitation-authoring.md) 对照原稿、完整改写、框架与镜头；按 [故事逻辑复核](references/story-logic-review.md) 实际阅读每版口播、核对人物关系、行动因果、经历归属及镜头，填写绑定当前稿件的审核记录并运行 `scripts/story_logic_review.py`。没有独立审阅者时如实记录同人第二遍复核；程序只检查记录和引用，不判断语义或事实。
 
+**有对话就结合音频和画面逐话轮写明谁说。** 按 [对话角色与声音标注](references/dialogue-and-speaker-labels.md)，在完整新稿、分场稿、台词槽和素材表的句式建议中，明确说话角色、对谁说及声音方式。要复刻或生成视频时，再按该参考的「从声画话轮到生成分镜」绑定音频起止、画内外发声、可见嘴部、倾听状态与所需关键帧。物理镜头、话轮和生成任务分别编号；换人不自动增加切镜，一句话也不必新生一张图。现场问答、画外提问、对镜头口播和后配旁白分别标注；不能用一个段落角色标签覆盖多人来回问答，也不能把拍到谁当成谁在说。新拍角色安排与原片说话人证据分开，未知原声身份仍标未知。
+
 **原稿连续标色阅读。** 新生产的分析在 `analysis.json` 明确设置 `layout_profile: "source-reading/v9.2"`，然后调用既有渲染、发布与回读流程；新增 H2「原稿｜标色阅读」，仅连续展示现有来源文本及其短语颜色，来源和校对状态单独说明，不把字幕摘录充作听校原声。既有输入不设置 profile 时维持原布局。渲染、发布及修复工具均可选 `--layout-profile source-reading/v9.2`，但整个流程必须一致；推荐写入 analysis 以便审批哈希和回读持续绑定。源文文本与已审阅的范围、颜色不能改写。
 
 脚本段输入先运行 `validate_section_content.py`：绑定当前时间线哈希，逐段具体写填空句和拍法，实际情绪事件须落在所引镜头内。新数据显式区分实际变化、无明显变化和证据不足，旧四阶段数据保持兼容；不强补转折，也不截断事件。重复整段套话、旧镜头引用、状态不一致均退回；通过此检查仍需独立内容复核。
@@ -56,6 +58,8 @@ For a packaged project or a request to continue earlier breakdowns, read [refere
 The two linked deliverables are complete script analysis/semantic segment clips and a numbered shot-material library. Document updates and Base upload are agent-operated through current Feishu tools, not an unattended end-to-end pipeline. Read [references/document-access.md](references/document-access.md) before creating or transferring a project document so the intended human can edit it.
 
 ## Choose The Workflow First
+
+用户要求进一步生成复刻成片时，可将已绑定来源的原文、镜头时间线、脚本与镜头对齐表、素材引用和未审核项交给已安装的 `short-video-replication`。保留现有分析及审核状态；交接表中的段镜交集不等于逐句配音时长。仅做拆解、仿写或飞书整理时不启动生成，也不要求安装复刻技能。
 
 用户要结合千川信息流带货深入拆解、复刻脚本或提升素材调用时，先读 [references/qianchuan-deep-breakdown.md](references/qianchuan-deep-breakdown.md)。在原文、语义段、逐画面基础上分析购买情境、信息推进、主张与展示材料、声画关系、行动承接及有条件的复用；不要只加标签或套统一销售公式。用既有字段和 `analysis_mode: qianchuan_deep` 显示具体问题、作用、论证/声画关系和复用条件，不新增逐视频文档。情绪按实际变化记录，原作者主张不等于证据已验证。纯整理与深拆不进入 AI 任务台、生成服务或广告投放。
 

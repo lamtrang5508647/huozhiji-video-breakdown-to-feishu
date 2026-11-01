@@ -24,6 +24,11 @@ flowchart TD
   K --> N[保存内容与链接回读]
   L --> N
   M --> N
+  D --> P[按请求复刻：台词、话轮与时长计划]
+  E --> P
+  P --> Q[角色/场景/声音参考与逐镜动态提示词]
+  Q --> R[已连接模型或画布：生成并保留任务回执]
+  R --> S[合成、视听复核与可播放成片]
 ```
 
 ## 两类交付
@@ -48,7 +53,7 @@ flowchart TD
 
 | 模块 | 主要文件 | 负责什么 |
 | --- | --- | --- |
-| 本地入口 | `scripts/project.py` | 初始化、链接提取、依赖检查、合成演示、安装两个 Skill |
+| 本地入口 | `scripts/project.py` | 初始化、链接提取、依赖检查、合成演示、安装四个 Skill |
 | 提取入口 | `skill/video-link-extractor/scripts/acquire.py` | 分享链接路由、目标身份、元数据、原片下载与完整解码验收 |
 | 分析合约 | `validate_script_v3.py`、`validate_section_content.py` | 脚本段连续性、镜头交集、段级证据 |
 | 标色与复核 | `phrase_annotation.py`、`context_review.py`、`publication_review.py` | 字符区间、功能标签、语境记录、来源与审核哈希 |
@@ -59,9 +64,14 @@ flowchart TD
 | 文档更新 | `publish_platform_chapter.py`、`repair_platform_chapter.py` | 按现有注册章节更新，保留其他视频和人工修改 |
 | 素材验收 | `verify_material_gallery.py` | 附件、产品平台归属、画廊过滤、关联与视频封面 |
 | 可选扩展 | PNG、ASR、素材复用与 AI 任务参考 | 需要时启用；不等同于生成视频服务 |
+| 复刻制作 | `skill/short-video-replication/SKILL.md` | 接续来源分析、逐镜提示词、实际模型调用与合成验收；不内置模型服务 |
 | 旧模板 | `legacy-folder-workflow.md` | 显式选择的 27 字段链，不作为新项目默认值 |
 
-除根目录和提取入口外，上表脚本均位于 `skill/analyze-folder-videos-to-feishu/scripts/`。
+未写完整路径的上表脚本位于 `skill/analyze-folder-videos-to-feishu/scripts/`。
+
+复刻沿用已有来源哈希、脚本段/画面编号、编辑事件及审核缺口，生成文件另建记录。
+源片时间、生成片段内部时间与成片输出时间分别保存。文字分析、提示词草案和模型
+受理都不能冒充成片；完整画布生成也不是使用这套方法的前提。
 
 ## 从项目专版剥离了什么
 
