@@ -19,7 +19,7 @@
 | 从分享链接取得原片 | [video-link-extractor](skill/video-link-extractor/SKILL.md) | 来源身份、可用媒体、解码与哈希回执 |
 | 理解脚本、拆段拆镜、归档飞书 | [analyze-folder-videos-to-feishu](skill/analyze-folder-videos-to-feishu/SKILL.md) | 原文、语义段、镜头及对应素材 |
 | 研究剪辑、字幕、运镜和音画节奏 | [bilibili-editing-analysis](skill/bilibili-editing-analysis/SKILL.md) | 时间证据、编辑事件与剪辑交接 |
-| 复刻带货、探店或采访成片 | [short-video-replication](skill/short-video-replication/SKILL.md) | 逐镜动态提示词、生成任务、声音路线与成片验收 |
+| 复刻带货、探店或采访成片 | [short-video-replication](skill/short-video-replication/SKILL.md) | 原稿顺句、可视分镜板、连续切镜、生成任务与成片验收 |
 
 只加载当前任务需要的技能。已有可信原片或拆解时直接复用，保留源文件哈希、
 镜头/脚本段身份及未复核项。仅要分析时停在分析；仅要提示词时不提交付费生成。
