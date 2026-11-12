@@ -11,7 +11,7 @@ Process videos one at a time from the user's explicit source and target. Keep an
 
 默认每条视频交付两层：完整脚本框架/连续语义段，以及逐画面视频素材库。**文档存在不代表素材已交付；关键帧不能代替视频。**
 
-只需把参考视频写入既有结果表时，使用[带货参考视频回填与标签](references/qianchuan-reference-table-review.md)核对完整原稿、前三秒声画和留人逻辑，并按来源商品与当前目标产品填写标签、素材目的和品牌。依据讲述立场、开头主钩子、主要音画呈现和全片主线填写内容身份、素材开头类型、素材生态及内容形式。素材等级由用户评定。
+只需把参考视频写入既有结果表时，使用[带货参考视频回填与标签](references/qianchuan-reference-table-review.md)核对完整原稿、前三秒声画和留人逻辑，并按来源商品与当前目标产品填写标签、素材目的和品牌。依据讲述立场、开头主钩子、主要音画呈现和全片主线填写内容身份、素材开头类型、素材生态及内容形式。用户要求价格参考时，按该规则核对单盒价格并简写金额。素材等级由用户评定。
 
 后续新做的带货视频完整脚本拆解，默认采用 [千川深拆方法](references/qianchuan-deep-breakdown.md)，新 authoring 使用 `analysis_mode: qianchuan_deep`，无需用户再次提出千川。仅要逐画面清单时按该清单交付；已保存的旧章节不自动改写。
 
